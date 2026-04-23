@@ -95,7 +95,7 @@ struct ConcertImportView: View {
         errorMessage = nil
         defer { isParsing = false }
         do {
-            let parser = AppEnvironment.aiParser
+            let parser = AppEnvironment.tripParser
             let concert: ConcertSource
             if let pickedImage {
                 concert = try await parser.parseConcertTicket(image: pickedImage)

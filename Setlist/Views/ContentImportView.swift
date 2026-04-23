@@ -71,7 +71,7 @@ struct ContentImportView: View {
         errorMessage = nil
         defer { isParsing = false }
         do {
-            let parser = AppEnvironment.aiParser
+            let parser = AppEnvironment.tripParser
             let content = try await parser.parseContentLink(url)
             let builder = BundleBuilder(mrt: AppEnvironment.mrtClient)
             bundle = try await builder.buildFromContent(content)

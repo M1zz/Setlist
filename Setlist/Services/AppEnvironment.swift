@@ -1,22 +1,16 @@
 import Foundation
 
-// Tiny service locator. Keys come from, in order:
+// Tiny service locator. The MRT key is read from, in order:
 //   1. Bundle/Secrets.plist (auto-generated at build time from the macOS
 //      Keychain by the "Generate Secrets.plist from Keychain" build phase).
-//   2. ProcessInfo.processInfo.environment (Xcode scheme env vars — useful
-//      when running the app with a key you don't want persisted to disk).
-//   3. Info.plist (for anyone who wants to wire up xcconfig by hand).
-// Missing keys fall through to empty strings, which keeps each service in
-// mock-data mode. That's why the UI flow works end-to-end with zero setup.
+//   2. ProcessInfo.processInfo.environment — useful when running with a key
+//      you don't want persisted to disk (Xcode scheme env vars).
+//   3. Info.plist (for xcconfig wiring).
+// Missing key falls through to an empty string and MRTClient enters
+// mock-data mode. The trip parser has no keys to resolve because all
+// parsing runs on-device (Vision OCR + regex + local lookup tables).
 
 enum AppEnvironment {
-    static var anthropicAPIKey: String {
-        resolveKey(
-            secretsKey: "AnthropicAPIKey",
-            envVar: "ANTHROPIC_API_KEY",
-            infoKey: "AnthropicAPIKey"
-        )
-    }
     static var mrtAPIKey: String {
         resolveKey(
             secretsKey: "MRTAPIKey",
@@ -25,14 +19,9 @@ enum AppEnvironment {
         )
     }
 
-    static var useMockAI: Bool { anthropicAPIKey.isEmpty }
     static var useMockMRT: Bool { mrtAPIKey.isEmpty }
 
-    static let aiParser: AIParsingServiceProtocol = AIParsingService(
-        anthropicAPIKey: anthropicAPIKey,
-        mcpServerURL: URL(string: "https://mcp-servers.myrealtrip.com/mcp"),
-        useMockData: useMockAI
-    )
+    static let tripParser: TripParsingServiceProtocol = TripParsingService()
 
     static let mrtClient: MRTClientProtocol = MRTClient(
         apiKey: mrtAPIKey,
