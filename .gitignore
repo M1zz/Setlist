@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# Xcode
+build/
+DerivedData/
+*.xcuserdatad/
+xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# API keys — auto-generated from macOS Keychain by the
+# "Generate Secrets.plist from Keychain" build phase.
+# Never commit this file.
+Setlist/Secrets.plist
