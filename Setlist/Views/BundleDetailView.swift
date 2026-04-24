@@ -15,10 +15,12 @@ struct BundleDetailView: View {
                 flightsSection
                 hotelsSection
                 activitiesSection
-                totalCard
-                actionButtons
             }
             .padding()
+            .padding(.bottom, 140)
+        }
+        .safeAreaInset(edge: .bottom) {
+            stickyBookingBar
         }
         .navigationTitle("Your trip")
         .navigationBarTitleDisplayMode(.inline)
@@ -37,6 +39,45 @@ struct BundleDetailView: View {
         } message: { msg in
             Text(msg)
         }
+    }
+
+    private var stickyBookingBar: some View {
+        VStack(spacing: 10) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Estimated total").font(.caption).foregroundStyle(.secondary)
+                    Text("₩\(bundle.estimatedTotalKRW.formatted())")
+                        .font(.title3.bold())
+                }
+                Spacer()
+                Button {
+                    saveToWishlist()
+                } label: {
+                    Image(systemName: "heart")
+                        .font(.title3)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+
+                Button {
+                    Task { await openBooking() }
+                } label: {
+                    HStack {
+                        if isOpeningBooking { ProgressView().tint(.white) }
+                        Text(isOpeningBooking ? "Opening…" : "Book all")
+                            .fontWeight(.semibold)
+                    }
+                    .padding(.horizontal, 8)
+                    .frame(height: 44)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(isOpeningBooking)
+            }
+        }
+        .padding()
+        .background(.ultraThinMaterial)
     }
 
     // MARK: - Subviews
@@ -69,22 +110,29 @@ struct BundleDetailView: View {
                     .foregroundStyle(.secondary)
             }
             ForEach(Array(bundle.flights.enumerated()), id: \.element.id) { index, f in
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("\(f.airline) \(f.flightNumber)").bold()
-                        Spacer()
-                        if f.priceKRW > 0 {
-                            Text("₩\(f.priceKRW.formatted())")
-                        } else {
-                            Text("See fare").foregroundStyle(.secondary)
+                Button {
+                    Task { await openItem(url: f.bookingURL) }
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("\(f.airline) \(f.flightNumber)").bold()
+                            Spacer()
+                            if f.priceKRW > 0 {
+                                Text("₩\(f.priceKRW.formatted())")
+                            } else {
+                                Text("See fare").foregroundStyle(.secondary)
+                            }
+                            Image(systemName: "chevron.right").foregroundStyle(.tertiary).font(.caption)
                         }
+                        Text(
+                            "\(f.fromAirport) → \(f.toAirport) · \(f.departureTime.formatted(date: .abbreviated, time: .shortened))"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     }
-                    Text(
-                        "\(f.fromAirport) → \(f.toAirport) · \(f.departureTime.formatted(date: .abbreviated, time: .shortened))"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 .padding(.vertical, 6)
                 if index < bundle.flights.count - 1 { Divider() }
             }
@@ -99,21 +147,28 @@ struct BundleDetailView: View {
                     .foregroundStyle(.secondary)
             }
             ForEach(Array(bundle.hotels.enumerated()), id: \.element.id) { index, h in
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text(h.name).bold()
-                        Spacer()
-                        Text("₩\(h.pricePerNightKRW.formatted())/night")
-                    }
-                    Text(hotelCaption(h))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    if h.freeCancellation {
-                        Label("Free cancellation", systemImage: "checkmark.seal")
+                Button {
+                    Task { await openItem(url: h.bookingURL) }
+                } label: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(h.name).bold().lineLimit(2)
+                            Spacer()
+                            Text("₩\(h.pricePerNightKRW.formatted())/night")
+                            Image(systemName: "chevron.right").foregroundStyle(.tertiary).font(.caption)
+                        }
+                        Text(hotelCaption(h))
                             .font(.caption)
-                            .foregroundStyle(.green)
+                            .foregroundStyle(.secondary)
+                        if h.freeCancellation {
+                            Label("Free cancellation", systemImage: "checkmark.seal")
+                                .font(.caption)
+                                .foregroundStyle(.green)
+                        }
                     }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 .padding(.vertical, 6)
                 if index < bundle.hotels.count - 1 { Divider() }
             }
@@ -142,16 +197,37 @@ struct BundleDetailView: View {
                     .foregroundStyle(.secondary)
             }
             ForEach(Array(bundle.activities.enumerated()), id: \.element.id) { index, a in
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(a.title).bold().lineLimit(2)
-                        Text(activityCaption(a))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                Button {
+                    Task { await openItem(url: a.bookingURL) }
+                } label: {
+                    HStack(alignment: .top, spacing: 12) {
+                        if let url = a.thumbnailURL {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .success(let img):
+                                    img.resizable().scaledToFill()
+                                default:
+                                    Color.gray.opacity(0.1)
+                                }
+                            }
+                            .frame(width: 64, height: 64)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(a.title).bold().lineLimit(2)
+                            Text(activityCaption(a))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Text("₩\(a.priceKRW.formatted())")
+                            Image(systemName: "chevron.right").foregroundStyle(.tertiary).font(.caption)
+                        }
                     }
-                    Spacer()
-                    Text("₩\(a.priceKRW.formatted())")
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 .padding(.vertical, 6)
                 if index < bundle.activities.count - 1 { Divider() }
             }
@@ -163,46 +239,6 @@ struct BundleDetailView: View {
         if a.durationHours > 0 { parts.append(String(format: "%.1f hrs", a.durationHours)) }
         if a.rating > 0 { parts.append(String(format: "★ %.1f", a.rating)) }
         return parts.joined(separator: " · ")
-    }
-
-    private var totalCard: some View {
-        HStack {
-            Text("Estimated total").font(.headline)
-            Spacer()
-            Text("₩\(bundle.estimatedTotalKRW.formatted())")
-                .font(.title3.bold())
-        }
-        .padding()
-        .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 14))
-    }
-
-    private var actionButtons: some View {
-        VStack(spacing: 12) {
-            Button {
-                Task { await openBooking() }
-            } label: {
-                HStack {
-                    if isOpeningBooking { ProgressView().tint(.white) }
-                    Text(isOpeningBooking ? "Opening…" : "Book on MyRealTrip")
-                        .fontWeight(.semibold)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(isOpeningBooking)
-
-            Button {
-                saveToWishlist()
-            } label: {
-                Label("Save to wishlist", systemImage: "heart")
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-        }
     }
 
     @ViewBuilder
@@ -255,6 +291,16 @@ struct BundleDetailView: View {
             // Fall back to the raw URL so the user still reaches MyRealTrip.
             _ = await UIApplication.shared.open(target)
             bookingError = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func openItem(url: URL) async {
+        do {
+            let tracked = try await AppEnvironment.mrtClient.generateMyLink(targetURL: url)
+            _ = await UIApplication.shared.open(tracked)
+        } catch {
+            _ = await UIApplication.shared.open(url)
         }
     }
 

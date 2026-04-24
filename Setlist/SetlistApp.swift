@@ -20,6 +20,8 @@ struct RootView: View {
                 .tabItem { Label("Wishlist", systemImage: "heart") }
             BookingsView()
                 .tabItem { Label("Trips", systemImage: "airplane") }
+            RevenueView()
+                .tabItem { Label("Revenue", systemImage: "chart.line.uptrend.xyaxis") }
         }
     }
 }

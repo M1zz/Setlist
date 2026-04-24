@@ -3,7 +3,9 @@ import SwiftUI
 struct HomeView: View {
     @State private var showConcertImport = false
     @State private var showContentImport = false
-    @State private var prefillText: String = ""
+    @State private var pendingBundle: TravelBundle?
+    @State private var buildingTour: UpcomingTour?
+    @State private var buildError: String?
 
     var body: some View {
         NavigationStack {
@@ -14,10 +16,7 @@ struct HomeView: View {
                         subtitle: "Upload your ticket. We find flights and hotels by the venue before prices spike.",
                         systemImage: "ticket.fill",
                         tint: .purple
-                    ) {
-                        prefillText = ""
-                        showConcertImport = true
-                    }
+                    ) { showConcertImport = true }
 
                     heroCard(
                         title: "From a reel or video",
@@ -34,9 +33,24 @@ struct HomeView: View {
             }
             .navigationTitle("Setlist")
             .sheet(isPresented: $showConcertImport) {
-                ConcertImportView(prefilledText: prefillText)
+                ConcertImportView()
             }
             .sheet(isPresented: $showContentImport) { ContentImportView() }
+            .navigationDestination(item: $pendingBundle) { bundle in
+                BundleDetailView(bundle: bundle)
+            }
+            .alert(
+                "Couldn't build trip",
+                isPresented: Binding(
+                    get: { buildError != nil },
+                    set: { if !$0 { buildError = nil } }
+                ),
+                presenting: buildError
+            ) { _ in
+                Button("OK", role: .cancel) { buildError = nil }
+            } message: { msg in
+                Text(msg)
+            }
         }
     }
 
@@ -79,8 +93,7 @@ struct HomeView: View {
 
     private func tourRow(_ tour: UpcomingTour) -> some View {
         Button {
-            prefillText = "\(tour.artist), \(tour.city), \(tour.date.formatted(.iso8601.year().month().day()))"
-            showConcertImport = true
+            Task { await buildTour(tour) }
         } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
@@ -89,12 +102,41 @@ struct HomeView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                if buildingTour?.id == tour.id {
+                    ProgressView()
+                } else {
+                    Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                }
             }
             .padding(.vertical, 10)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(buildingTour != nil)
+    }
+
+    @MainActor
+    private func buildTour(_ tour: UpcomingTour) async {
+        buildingTour = tour
+        defer { buildingTour = nil }
+
+        let coords = CityDB.coordinates(for: tour.city) ?? (35.6762, 139.6503)
+        let country = CityDB.cities.first { $0.name == tour.city }?.country ?? "Japan"
+        let concert = ConcertSource(
+            artist: tour.artist,
+            venueName: "\(tour.city) Venue",
+            venueLatitude: coords.0,
+            venueLongitude: coords.1,
+            city: tour.city,
+            country: country,
+            showDate: tour.date
+        )
+        let builder = BundleBuilder(mrt: AppEnvironment.mrtClient)
+        do {
+            pendingBundle = try await builder.buildFromConcert(concert)
+        } catch {
+            buildError = error.localizedDescription
+        }
     }
 }
 

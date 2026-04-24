@@ -12,8 +12,9 @@
 4. [시나리오 C — 릴스/비디오 URL 붙여넣기](#시나리오-c--릴스비디오-url-붙여넣기)
 5. [시나리오 D — 트렌딩 투어 카드 탭](#시나리오-d--트렌딩-투어-카드-탭)
 6. [시나리오 E — 위시리스트 · 예약 내역](#시나리오-e--위시리스트--예약-내역)
-7. [파서가 지원하는 것 · 못하는 것](#파서가-지원하는-것--못하는-것)
-8. [테스트 데이터 일람](#테스트-데이터-일람)
+7. [시나리오 F — 수입(커미션) API 검증](#시나리오-f--수입커미션-api-검증)
+8. [파서가 지원하는 것 · 못하는 것](#파서가-지원하는-것--못하는-것)
+9. [테스트 데이터 일람](#테스트-데이터-일람)
 
 ---
 
@@ -212,6 +213,128 @@ Instagram은 비로그인 요청에 OG 태그를 거의 제공하지 않음 → 
 1. `Book on MyRealTrip` 탭 → 파트너 링크(`myrealt.rip/xxx`) 자동 생성되어 브라우저 열림
 2. MRT 파트너 페이지 → 마이링크 목록에 방금 생성된 링크가 기록됨
 3. 실제로 해당 링크로 결제가 일어나면 7% 커미션 귀속
+
+---
+
+## 시나리오 F — 수입(커미션) API 검증
+
+> **상황**: 내가 뿌린 mylink로 누군가 예약을 완료하면 MRT가 7% 커미션을 귀속시킨다. 앱의 `Revenue` 탭은 `/v1/revenues` + `/v1/revenues/flight`를 호출해서 이 수입을 집계한다.
+> **목표**: 데이터가 실제로 들어오는지, 어느 mylink에서 왔는지, 정산 타이밍이 어떻게 도는지 전부 점검.
+
+### F-1. 앱에서 실시간 확인 (가장 편함)
+1. 탭바 → `Revenue`
+2. 상단 hero 카드에 **총 커미션 / 총 판매액 / 평균 rate / 건수** 표시
+3. 기간 세그먼트: `7d / 30d / 90d`
+4. 날짜 기준 세그먼트:
+   - `Booking date` (= MRT의 `PAYMENT`): 예약이 일어난 날 기준
+   - `Settlement` (= `SETTLEMENT`): MRT가 정산 처리한 날 기준 (매일 6AM KST)
+5. Pull-to-refresh or 우상단 새로고침 버튼
+6. 파트너 키가 없으면 Mock 데이터가 뜸 (USJ 티켓 / 신주쿠 호텔 예시 2건)
+
+### F-2. Curl로 바로 서버 응답 확인
+
+**준비**: Keychain에 `myrealtrip-partner-api` 엔트리가 있어야 함.
+```bash
+export MRT_KEY=$(security find-generic-password -a "$USER" -s "myrealtrip-partner-api" -w)
+```
+
+**일반 상품 수익 (TNA + 숙소) · 최근 30일 예약 기준**
+```bash
+START=$(date -v-30d +%Y-%m-%d)
+END=$(date +%Y-%m-%d)
+curl -sS -H "Authorization: Bearer $MRT_KEY" \
+  "https://partner-ext-api.myrealtrip.com/v1/revenues?dateSearchType=PAYMENT&startDate=$START&endDate=$END" \
+  | python3 -m json.tool | head -40
+```
+
+**항공 상품 수익 · 최근 30일 정산 기준**
+```bash
+curl -sS -H "Authorization: Bearer $MRT_KEY" \
+  "https://partner-ext-api.myrealtrip.com/v1/revenues/flight?dateSearchType=SETTLEMENT&startDate=$START&endDate=$END" \
+  | python3 -m json.tool | head -40
+```
+
+**성공 응답 형태**
+```json
+{
+  "data": [
+    {
+      "linkId": "1000001",
+      "reservationNo": "TNA-20260415-00001234",
+      "salePrice": 150000,
+      "commissionBase": 147000,
+      "commission": 10290,
+      "commissionRate": 0.07,
+      "settlementCriteriaDate": "2026-04-16",
+      "utmContent": "reel-parser",
+      "closingType": "결제완료",
+      "productTitle": "도쿄 돈키호테 할인쿠폰",
+      "productCategory": "TICKET",
+      "status": "CONFIRM", "statusKor": "예약확정",
+      "city": "Tokyo", "country": "Japan"
+    }
+  ],
+  "meta": { "totalCount": 1 },
+  "result": { "status": 200, "message": "SUCCESS", "code": "success" }
+}
+```
+
+**계정이 새거라 data=[]인 경우 (정상)**
+```json
+{ "data": [], "meta": { "totalCount": 0 }, "result": { "status": 200, ... } }
+```
+→ 인증은 통과, 아직 commissionable 예약이 없다는 뜻. F-3으로.
+
+### F-3. End-to-end 커미션 귀속 테스트 (실돈 1개 예약)
+
+가장 확실한 검증. 싼 TNA 상품(₩10k 이하) 하나 골라서 실제로 결제해 본다.
+
+1. **앱**에서 `Discover → From concert ticket → 도쿄 티켓 텍스트 입력 → Build trip`
+   - 또는 홈 트렌딩 `BTS ARIRANG · Tokyo` 탭 (즉시 번들 빌드됨 = 심리스 플로우)
+2. 번들 하단 `Book all` (또는 특정 activity row 탭)
+   - Safari가 `myrealt.rip/<shortcode>` 로 열림 → MRT 상세 페이지로 리다이렉트
+3. URL에 `?mylink_id=...&utm_content=...` 붙어있는지 확인 (파트너 귀속 파라미터)
+4. **이 상태에서 MRT 앱/웹에서 실제로 결제 완료**
+5. 예약 즉시 `/v1/reservations`에 나타남:
+   ```bash
+   curl -sS -H "Authorization: Bearer $MRT_KEY" \
+     "https://partner-ext-api.myrealtrip.com/v1/reservations?dateSearchType=RESERVATION_DATE&startDate=$START&endDate=$END&pageSize=10" \
+     | python3 -m json.tool | head -40
+   ```
+   → 앱 `Trips` 탭에서도 수동 새로고침 시 "From MyRealTrip" 섹션에 반영
+6. 다음 날 오전 6시 KST 이후 `/v1/revenues`에 커미션이 정산되어 등장:
+   - 예약 당일 → `/v1/reservations`: 예약확정 상태 ✓, `/v1/revenues`: 아직 없음
+   - 다음날 06:00 이후 → `/v1/revenues`: `commission` 필드에 금액 붙음
+7. 앱 `Revenue` 탭 `Settlement` 세그먼트로 전환하면 보임
+
+### F-4. 환불/취소 시나리오
+- 예약을 취소하면 같은 `reservationNo`로 `commission`이 **음수**로 갱신되어 반환됨 (`closingType: "환불완료"`)
+- `Revenue` 탭의 hero 숫자는 음수 건도 합산하므로 실제 정산 금액과 일치
+- 앱 UI에서는 `+₩XXX` 가 빨간색으로 변함 (음수 처리)
+
+### F-5. utmContent로 유입 추적
+- 앱에서 `generateMyLink(targetURL:)` 호출 전에 URL에 `?utm_content=<라벨>` 을 붙이면 (코드 개선 여지)
+- `/v1/revenues` 응답에 그 라벨이 그대로 내려와서 어떤 유입(콘서트 플로우 / 릴스 플로우 / 특정 아티스트 팬덤)에서 왔는지 집계 가능
+- 현재는 라벨이 붙지 않음 → 추가하려면 `MRTClient.generateMyLink` 시그니처에 `utmContent: String?` 추가하고 `BundleDetailView.openBooking`이 source별 라벨 전달
+
+### F-6. 체크리스트
+
+| 검증 항목 | 어디서 확인 | 기대값 |
+|:--------|:----------|:------|
+| Bearer 인증 통과 | `curl .../v1/revenues` 또는 `Revenue` 탭 | HTTP 200, `result.status=200` |
+| 파트너 tier 접근권한 | 응답 `result.code` | `"success"` (403 아니면 OK) |
+| 최초 계정 (예약 0건) | `/v1/revenues` | `data: [], totalCount: 0` |
+| 예약 발생 후 | `/v1/reservations` | 즉시 반영 |
+| 정산 후 커미션 | `/v1/revenues` (다음날 6AM+) | `commission > 0`, `commissionRate ≈ 0.07` |
+| 앱 Revenue 탭 합계 | hero 카드 | sales 합, commission 합, rate % 일치 |
+| 취소 건 | `Revenue` 탭 동일 reservationNo | 빨간 음수 |
+
+### F-7. 흔한 트러블슈팅
+
+- **`/v1/revenues` 호출이 401**: 키가 Keychain에 없거나 만료됨. `security find-generic-password -a "$USER" -s "myrealtrip-partner-api" -w` 로 확인.
+- **`data=[]` 인데 예약은 분명히 있음**: `dateSearchType`을 `PAYMENT` → `SETTLEMENT`으로 바꿔보기. 정산일 기준이면 다음날 6AM 전까지는 비어있음.
+- **`status: 403, "해당 API Key는 리소스 사용 권한이 없습니다"`**: 파트너 페이지에서 Open API 접근권한 확인. marketing_partner@myrealtrip.com 에 문의.
+- **앱 Revenue 탭이 항상 Mock 데이터**: `AppEnvironment.useMockMRT == true`인 상태. 빌드 스크립트가 Keychain 키를 못 읽은 것. `Secrets.plist` 빌드 결과를 확인하고 빌드 로그에서 `Secrets.plist generated (MRT key: N chars)` N이 0이면 Keychain에 키 저장 필요.
 
 ---
 

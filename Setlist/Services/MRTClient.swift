@@ -35,6 +35,18 @@ protocol MRTClientProtocol {
         from startDate: Date,
         to endDate: Date
     ) async throws -> [RemoteReservation]
+
+    func fetchRevenues(
+        from startDate: Date,
+        to endDate: Date,
+        dateType: RevenueDateType
+    ) async throws -> [RevenueLine]
+
+    func fetchFlightRevenues(
+        from startDate: Date,
+        to endDate: Date,
+        dateType: RevenueDateType
+    ) async throws -> [RevenueLine]
 }
 
 struct RemoteReservation: Identifiable, Hashable {
@@ -44,6 +56,27 @@ struct RemoteReservation: Identifiable, Hashable {
     let reservedAt: Date?
     let tripStartedAt: Date?
     let salePriceKRW: Int
+}
+
+enum RevenueDateType: String, Hashable {
+    case settlement = "SETTLEMENT"
+    case payment = "PAYMENT"
+}
+
+struct RevenueLine: Identifiable, Hashable {
+    let id: String          // reservationNo
+    let productTitle: String
+    let productCategory: String
+    let statusKor: String
+    let salePriceKRW: Int
+    let commissionKRW: Int
+    let commissionRate: Double
+    let reservedAt: Date?
+    let settlementDate: Date?
+    let linkId: String?
+    let city: String?
+    let country: String?
+    let utmContent: String?
 }
 
 struct MRTClient: MRTClientProtocol {
@@ -303,6 +336,60 @@ struct MRTClient: MRTClientProtocol {
         }
     }
 
+    // MARK: - Revenues
+
+    func fetchRevenues(
+        from startDate: Date,
+        to endDate: Date,
+        dateType: RevenueDateType
+    ) async throws -> [RevenueLine] {
+        if useMockData { return MRTMockData.revenues() }
+        let env: MRTEnvelope<[RevenueItem]> = try await get(
+            "/v1/revenues",
+            query: [
+                URLQueryItem(name: "dateSearchType", value: dateType.rawValue),
+                URLQueryItem(name: "startDate", value: dayFormatter.string(from: startDate)),
+                URLQueryItem(name: "endDate", value: dayFormatter.string(from: endDate))
+            ]
+        )
+        return (env.data ?? []).map { toLine($0) }
+    }
+
+    func fetchFlightRevenues(
+        from startDate: Date,
+        to endDate: Date,
+        dateType: RevenueDateType
+    ) async throws -> [RevenueLine] {
+        if useMockData { return [] }
+        let env: MRTEnvelope<[RevenueItem]> = try await get(
+            "/v1/revenues/flight",
+            query: [
+                URLQueryItem(name: "dateSearchType", value: dateType.rawValue),
+                URLQueryItem(name: "startDate", value: dayFormatter.string(from: startDate)),
+                URLQueryItem(name: "endDate", value: dayFormatter.string(from: endDate))
+            ]
+        )
+        return (env.data ?? []).map { toLine($0) }
+    }
+
+    private func toLine(_ item: RevenueItem) -> RevenueLine {
+        RevenueLine(
+            id: item.reservationNo,
+            productTitle: item.productTitle ?? "(Unknown product)",
+            productCategory: item.productCategory ?? "",
+            statusKor: item.statusKor ?? item.status ?? "",
+            salePriceKRW: Int(item.commissionBase ?? item.salePrice ?? 0),
+            commissionKRW: Int(item.commission ?? 0),
+            commissionRate: item.commissionRate ?? 0,
+            reservedAt: dateTimeFormatter.date(from: item.reservedAt ?? ""),
+            settlementDate: dayFormatter.date(from: item.settlementCriteriaDate ?? ""),
+            linkId: item.linkId,
+            city: item.city,
+            country: item.country,
+            utmContent: item.utmContent
+        )
+    }
+
     // MARK: - Transport
 
     private func postForData<Body: Encodable, Payload: Decodable>(_ path: String, body: Body) async throws -> Payload {
@@ -501,6 +588,25 @@ private struct MyLinkData: Decodable {
     let mylink: String
 }
 
+private struct RevenueItem: Decodable {
+    let reservationNo: String
+    let salePrice: Int64?
+    let commissionBase: Int64?
+    let commission: Int64?
+    let commissionRate: Double?
+    let utmContent: String?
+    let closingType: String?
+    let reservedAt: String?
+    let settlementCriteriaDate: String?
+    let productTitle: String?
+    let productCategory: String?
+    let status: String?
+    let statusKor: String?
+    let linkId: String?
+    let city: String?
+    let country: String?
+}
+
 private struct ReservationItem: Decodable {
     let reservedAt: String?
     let reservationNo: String
@@ -659,4 +765,39 @@ enum MRTMockData {
     }
 
     static func reservations() -> [RemoteReservation] { [] }
+
+    static func revenues() -> [RevenueLine] {
+        [
+            RevenueLine(
+                id: "TNA-MOCK-0001",
+                productTitle: "오사카 유니버설 스튜디오 재팬 1일권",
+                productCategory: "TICKET",
+                statusKor: "예약확정",
+                salePriceKRW: 128_000,
+                commissionKRW: 8_960,
+                commissionRate: 0.07,
+                reservedAt: .now.addingTimeInterval(-86400 * 3),
+                settlementDate: .now.addingTimeInterval(-86400 * 2),
+                linkId: "mock-link-1",
+                city: "Osaka",
+                country: "Japan",
+                utmContent: "k-pop-fan-club"
+            ),
+            RevenueLine(
+                id: "TNA-MOCK-0002",
+                productTitle: "도쿄 신주쿠 호텔 그레이서리 2박",
+                productCategory: "HOTEL_V2",
+                statusKor: "예약확정",
+                salePriceKRW: 420_000,
+                commissionKRW: 29_400,
+                commissionRate: 0.07,
+                reservedAt: .now.addingTimeInterval(-86400 * 7),
+                settlementDate: .now.addingTimeInterval(-86400 * 6),
+                linkId: "mock-link-2",
+                city: "Tokyo",
+                country: "Japan",
+                utmContent: "reel-parser"
+            )
+        ]
+    }
 }

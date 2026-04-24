@@ -10,6 +10,9 @@ struct ConcertImportView: View {
     @State private var bundle: TravelBundle?
     @State private var errorMessage: String?
 
+    @State private var previewConcert: ConcertSource?
+    @State private var previewTask: Task<Void, Never>?
+
     init(prefilledText: String = "") {
         _manualText = State(initialValue: prefilledText)
     }
@@ -38,6 +41,19 @@ struct ConcertImportView: View {
                     Text("Example: \"BTS ARIRANG, Tokyo Dome, 2026-06-15 19:00\"")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+
+                if let preview = previewConcert {
+                    Section("We detected") {
+                        detectedRow("music.mic", "Artist", preview.artist)
+                        detectedRow("mappin.and.ellipse", "Venue", preview.venueName)
+                        detectedRow("location", "City", "\(preview.city), \(preview.country)")
+                        detectedRow(
+                            "calendar",
+                            "Show date",
+                            preview.showDate.formatted(date: .abbreviated, time: .shortened)
+                        )
+                    }
                 }
 
                 Section {
@@ -77,7 +93,17 @@ struct ConcertImportView: View {
                     if let data = try? await newItem?.loadTransferable(type: Data.self),
                        let ui = UIImage(data: data) {
                         pickedImage = ui
+                        await refreshPreview(fromImage: ui)
                     }
+                }
+            }
+            .onChange(of: manualText) { _, newText in
+                schedulePreviewUpdate(text: newText)
+            }
+            .task {
+                // If the view is opened with prefilled text, kick off a preview.
+                if !manualText.isEmpty {
+                    schedulePreviewUpdate(text: manualText)
                 }
             }
             .navigationDestination(item: $bundle) { bundle in
@@ -86,8 +112,42 @@ struct ConcertImportView: View {
         }
     }
 
+    private func detectedRow(_ icon: String, _ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Label(label, systemImage: icon)
+                .foregroundStyle(.secondary)
+                .font(.caption)
+                .labelStyle(.titleAndIcon)
+            Spacer()
+            Text(value)
+                .font(.callout.bold())
+                .multilineTextAlignment(.trailing)
+        }
+    }
+
     private var isDisabled: Bool {
         pickedImage == nil && manualText.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private func schedulePreviewUpdate(text: String) {
+        previewTask?.cancel()
+        previewTask = Task {
+            try? await Task.sleep(for: .milliseconds(300))
+            if Task.isCancelled { return }
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed.count >= 5 else {
+                await MainActor.run { previewConcert = nil }
+                return
+            }
+            let parsed = try? await AppEnvironment.tripParser.parseConcertTicket(rawText: trimmed)
+            if Task.isCancelled { return }
+            await MainActor.run { previewConcert = parsed }
+        }
+    }
+
+    private func refreshPreview(fromImage image: UIImage) async {
+        let parsed = try? await AppEnvironment.tripParser.parseConcertTicket(image: image)
+        await MainActor.run { previewConcert = parsed }
     }
 
     private func parse() async {
