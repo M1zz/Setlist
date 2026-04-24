@@ -11,40 +11,195 @@ struct WishlistView: View {
                 if trips.isEmpty {
                     ContentUnavailableView(
                         "No saved trips yet",
-                        systemImage: "heart",
-                        description: Text("Trips you save will show up here.")
+                        systemImage: "ticket",
+                        description: Text("Trips you save will show up here as tickets.")
                     )
                 } else {
-                    List {
-                        ForEach(trips) { trip in
-                            NavigationLink {
-                                if let bundle = trip.bundle {
-                                    BundleDetailView(bundle: bundle)
-                                } else {
-                                    Text("Could not load this trip")
+                    ScrollView {
+                        LazyVStack(spacing: 20) {
+                            ForEach(trips) { trip in
+                                NavigationLink {
+                                    destination(for: trip)
+                                } label: {
+                                    ticketRow(for: trip)
+                                        .padding(.horizontal, 16)
                                 }
-                            } label: {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(trip.title).font(.headline)
-                                    Text(trip.createdAt.formatted(date: .abbreviated, time: .omitted))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                .buttonStyle(.plain)
+                                .contextMenu {
+                                    Button(role: .destructive) {
+                                        delete(trip)
+                                    } label: {
+                                        Label("Remove", systemImage: "trash")
+                                    }
                                 }
                             }
                         }
-                        .onDelete(perform: delete)
+                        .padding(.vertical, 16)
                     }
+                    .background(Color(red: 0.95, green: 0.94, blue: 0.91))
                 }
             }
             .navigationTitle("Wishlist")
         }
     }
 
-    private func delete(at offsets: IndexSet) {
-        for index in offsets {
-            context.delete(trips[index])
+    @ViewBuilder
+    private func destination(for trip: SavedTrip) -> some View {
+        if let bundle = trip.bundle {
+            BundleDetailView(bundle: bundle, ticketImageData: trip.ticketImageData)
+        } else {
+            Text("Could not load this trip")
         }
+    }
+
+    private func ticketRow(for trip: SavedTrip) -> some View {
+        let bundle = trip.bundle
+        let accent = accentColor(for: bundle?.source)
+        return TicketCard(accent: accent) {
+            TicketTopSection(
+                title: trip.title,
+                subtitle: subtitle(for: bundle),
+                detail: dateRangeString(for: bundle),
+                ticketImageData: trip.ticketImageData,
+                accent: accent
+            )
+        } bottom: {
+            TicketBottomSection(
+                leading: "SAVED",
+                leadingValue: trip.createdAt.formatted(date: .abbreviated, time: .omitted),
+                trailing: "EST. TOTAL",
+                trailingValue: bundle.map { "₩\($0.estimatedTotalKRW.formatted())" } ?? "—",
+                seedForBarcode: trip.id.uuidString
+            )
+        }
+        .frame(height: 190)
+    }
+
+    private func delete(_ trip: SavedTrip) {
+        context.delete(trip)
         try? context.save()
+    }
+
+    private func subtitle(for bundle: TravelBundle?) -> String {
+        guard let bundle else { return "" }
+        switch bundle.source {
+        case .concert(let c): return "\(c.venueName) · \(c.city)"
+        case .content(let c): return c.detectedPlaceName ?? c.detectedCity
+        case .manual:         return ""
+        }
+    }
+
+    private func dateRangeString(for bundle: TravelBundle?) -> String {
+        guard let bundle else { return "" }
+        let start = bundle.suggestedDepartureDate.formatted(date: .abbreviated, time: .omitted)
+        let end = bundle.suggestedReturnDate.formatted(date: .abbreviated, time: .omitted)
+        return "\(start) – \(end)"
+    }
+
+    private func accentColor(for source: TripSource?) -> Color {
+        switch source {
+        case .concert: return .purple
+        case .content: return .pink
+        case .manual, .none: return .blue
+        }
+    }
+}
+
+// MARK: - Ticket content building blocks (shared with BookingsView)
+
+struct TicketTopSection: View {
+    let title: String
+    let subtitle: String
+    let detail: String
+    let ticketImageData: Data?
+    let accent: Color
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            thumbnail
+                .frame(width: 70, height: 70)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.title3.bold())
+                    .lineLimit(2)
+                    .foregroundStyle(.primary)
+                if !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                if !detail.isEmpty {
+                    Label(detail, systemImage: "calendar")
+                        .font(.caption2.bold())
+                        .foregroundStyle(accent)
+                        .labelStyle(.titleAndIcon)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    @ViewBuilder
+    private var thumbnail: some View {
+        if let data = ticketImageData, let ui = UIImage(data: data) {
+            Image(uiImage: ui)
+                .resizable()
+                .scaledToFill()
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color.black.opacity(0.08), lineWidth: 1)
+                )
+        } else {
+            RoundedRectangle(cornerRadius: 10)
+                .fill(
+                    LinearGradient(
+                        colors: [accent.opacity(0.22), accent.opacity(0.08)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay {
+                    Image(systemName: "ticket.fill")
+                        .font(.system(size: 28))
+                        .foregroundStyle(accent)
+                }
+        }
+    }
+}
+
+struct TicketBottomSection: View {
+    let leading: String
+    let leadingValue: String
+    let trailing: String
+    let trailingValue: String
+    let seedForBarcode: String
+
+    var body: some View {
+        HStack(alignment: .bottom) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(leading)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .kerning(1.2)
+                Text(leadingValue)
+                    .font(.callout.bold())
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(trailing)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .kerning(1.2)
+                Text(trailingValue)
+                    .font(.callout.bold())
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+            }
+        }
     }
 }
 

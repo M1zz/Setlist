@@ -103,19 +103,22 @@ final class SavedTrip {
     var bundleData: Data
     var title: String
     var note: String?
+    var ticketImageData: Data?
 
     init(
         id: UUID = UUID(),
         createdAt: Date = .now,
         bundleData: Data,
         title: String,
-        note: String? = nil
+        note: String? = nil,
+        ticketImageData: Data? = nil
     ) {
         self.id = id
         self.createdAt = createdAt
         self.bundleData = bundleData
         self.title = title
         self.note = note
+        self.ticketImageData = ticketImageData
     }
 
     var bundle: TravelBundle? {
@@ -130,19 +133,26 @@ final class BookedTrip {
     var bundleData: Data
     var title: String
     var bookingReference: String
+    var ticketImageData: Data?
 
     init(
         id: UUID = UUID(),
         bookedAt: Date = .now,
         bundleData: Data,
         title: String,
-        bookingReference: String
+        bookingReference: String,
+        ticketImageData: Data? = nil
     ) {
         self.id = id
         self.bookedAt = bookedAt
         self.bundleData = bundleData
         self.title = title
         self.bookingReference = bookingReference
+        self.ticketImageData = ticketImageData
+    }
+
+    var bundle: TravelBundle? {
+        try? JSONDecoder.setlist.decode(TravelBundle.self, from: bundleData)
     }
 }
 

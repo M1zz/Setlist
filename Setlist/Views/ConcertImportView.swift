@@ -107,7 +107,10 @@ struct ConcertImportView: View {
                 }
             }
             .navigationDestination(item: $bundle) { bundle in
-                BundleDetailView(bundle: bundle)
+                BundleDetailView(
+                    bundle: bundle,
+                    ticketImageData: pickedImage?.jpegData(compressionQuality: 0.7)
+                )
             }
         }
     }

@@ -3,10 +3,16 @@ import SwiftData
 
 struct BundleDetailView: View {
     let bundle: TravelBundle
+    let ticketImageData: Data?
     @Environment(\.modelContext) private var context
     @State private var savedConfirmation = false
     @State private var isOpeningBooking = false
     @State private var bookingError: String?
+
+    init(bundle: TravelBundle, ticketImageData: Data? = nil) {
+        self.bundle = bundle
+        self.ticketImageData = ticketImageData
+    }
 
     var body: some View {
         ScrollView {
@@ -268,7 +274,11 @@ struct BundleDetailView: View {
     private func saveToWishlist() {
         do {
             let data = try JSONEncoder.setlist.encode(bundle)
-            let trip = SavedTrip(bundleData: data, title: headline)
+            let trip = SavedTrip(
+                bundleData: data,
+                title: headline,
+                ticketImageData: ticketImageData
+            )
             context.insert(trip)
             try context.save()
             savedConfirmation = true
@@ -319,7 +329,8 @@ struct BundleDetailView: View {
             let booked = BookedTrip(
                 bundleData: data,
                 title: headline,
-                bookingReference: String(ref)
+                bookingReference: String(ref),
+                ticketImageData: ticketImageData
             )
             context.insert(booked)
             try context.save()
