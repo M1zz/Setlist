@@ -37,6 +37,10 @@ Setlist/
 5. Build and run. Mock data is enabled by default, so both flows work end
    to end without any keys.
 
+See **[USAGE.md](USAGE.md)** for end-to-end walkthrough scenarios,
+copy-pastable test inputs, and dummy ticket images you can drag into the
+simulator.
+
 ## Swapping in real APIs
 
 Both services are gated by `AppEnvironment.useMockData`. Flip it to
