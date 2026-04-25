@@ -47,6 +47,21 @@ protocol MRTClientProtocol {
         to endDate: Date,
         dateType: RevenueDateType
     ) async throws -> [RevenueLine]
+
+    // TNA detail / options / calendars / categories
+    func fetchTNADetail(gid: String) async throws -> TNADetail
+    func fetchTNAOptions(gid: String, selectedDate: Date) async throws -> TNAOptionsBundle
+    func fetchTNACalendar(gid: String, selectedDate: Date) async throws -> TNACalendar
+    func fetchTNACategories(city: String) async throws -> [TNACategory]
+
+    // Bulk lowest flight fares from a single origin (international only)
+    func fetchBulkLowestFlights(originCityCode: String, period: Int) async throws -> [BulkLowestFare]
+
+    // Flight reservations (separate from TNA/hotel reservations)
+    func fetchRecentFlightReservations(
+        from startDate: Date,
+        to endDate: Date
+    ) async throws -> [RemoteFlightReservation]
 }
 
 struct RemoteReservation: Identifiable, Hashable {
@@ -77,6 +92,73 @@ struct RevenueLine: Identifiable, Hashable {
     let city: String?
     let country: String?
     let utmContent: String?
+}
+
+struct TNADetail: Hashable {
+    let gid: String
+    let title: String
+    let description: String?
+    let reviewScore: Double?
+    let reviewCount: Int?
+    let included: [String]
+    let excluded: [String]
+    let itineraries: [TNAItineraryEntry]
+}
+
+struct TNAItineraryEntry: Hashable {
+    let title: String?
+    let description: String?
+}
+
+struct TNAOptionsBundle: Hashable {
+    let selectedDate: String
+    let options: [TNAOptionEntry]
+}
+
+struct TNAOptionEntry: Identifiable, Hashable {
+    let id: Int64
+    let name: String
+    let salePriceKRW: Int
+    let currency: String
+    let minPurchaseQuantity: Int?
+    let availablePurchaseQuantity: Int?
+}
+
+struct TNACalendar: Hashable {
+    let date: String              // YYYY-MM
+    let basePriceLabel: String?   // "9.3만"
+    let blockDates: Set<String>   // YYYY-MM-DD
+    let instantConfirm: Bool
+}
+
+struct TNACategory: Hashable {
+    let name: String   // 표시명
+    let value: String  // 검색용
+}
+
+struct BulkLowestFare: Identifiable, Hashable {
+    var id: String { "\(fromCity)-\(toCity)-\(departureDate)" }
+    let fromCity: String
+    let toCity: String
+    let period: Int
+    let departureDate: String  // YYYY-MM-DD
+    let returnDate: String
+    let totalPriceKRW: Int
+    let averagePriceKRW: Int?
+}
+
+struct RemoteFlightReservation: Identifiable, Hashable {
+    var id: String { reservationNo }
+    let reservationNo: String
+    let pnr: String?
+    let airlineCode: String
+    let airlineName: String
+    let operationScope: String   // INTERNATIONAL / DOMESTIC
+    let tripType: String         // ROUND_TRIP / ONE_WAY / MULTI
+    let statusKor: String
+    let reservedAt: Date?
+    let cancelledAt: Date?
+    let issueNetKRW: Int
 }
 
 struct MRTClient: MRTClientProtocol {
@@ -336,6 +418,120 @@ struct MRTClient: MRTClientProtocol {
         }
     }
 
+    // MARK: - TNA detail / options / calendars / categories
+
+    func fetchTNADetail(gid: String) async throws -> TNADetail {
+        if useMockData { return MRTMockData.tnaDetail(gid: gid) }
+        let body = TNADetailRequest(gid: gid)
+        let raw: TNADetailRaw = try await postForData("/v1/products/tna/detail", body: body)
+        return TNADetail(
+            gid: raw.gid,
+            title: raw.title,
+            description: raw.description,
+            reviewScore: raw.reviewScore,
+            reviewCount: raw.reviewCount,
+            included: raw.included ?? [],
+            excluded: raw.excluded ?? [],
+            itineraries: (raw.itineraries ?? []).map {
+                TNAItineraryEntry(title: $0.title, description: $0.description)
+            }
+        )
+    }
+
+    func fetchTNAOptions(gid: String, selectedDate: Date) async throws -> TNAOptionsBundle {
+        if useMockData {
+            return MRTMockData.tnaOptions(gid: gid, date: dayFormatter.string(from: selectedDate))
+        }
+        let body = TNAOptionsRequest(gid: gid, selectedDate: dayFormatter.string(from: selectedDate))
+        let raw: TNAOptionsRaw = try await postForData("/v1/products/tna/options", body: body)
+        return TNAOptionsBundle(
+            selectedDate: raw.selectedDate ?? dayFormatter.string(from: selectedDate),
+            options: (raw.options ?? []).map {
+                TNAOptionEntry(
+                    id: $0.id,
+                    name: $0.name,
+                    salePriceKRW: Int($0.salePrice),
+                    currency: $0.currency ?? "KRW",
+                    minPurchaseQuantity: $0.minPurchaseQuantity,
+                    availablePurchaseQuantity: $0.availablePurchaseQuantity
+                )
+            }
+        )
+    }
+
+    func fetchTNACalendar(gid: String, selectedDate: Date) async throws -> TNACalendar {
+        if useMockData {
+            return MRTMockData.tnaCalendar(date: dayFormatter.string(from: selectedDate))
+        }
+        let body = TNACalendarRequest(gid: gid, selectedDate: dayFormatter.string(from: selectedDate))
+        let raw: TNACalendarRaw = try await postForData("/v1/products/tna/calendars", body: body)
+        return TNACalendar(
+            date: raw.date ?? "",
+            basePriceLabel: raw.basePrice,
+            blockDates: Set(raw.blockDates ?? []),
+            instantConfirm: raw.instantConfirm ?? false
+        )
+    }
+
+    func fetchTNACategories(city: String) async throws -> [TNACategory] {
+        if useMockData { return MRTMockData.tnaCategories() }
+        let keyword = TripParsingHelpers.koreanCityName(for: city) ?? city
+        let body = TNACategoriesRequest(city: keyword)
+        let raw: TNACategoriesRaw = try await postForData("/v1/products/tna/categories", body: body)
+        return (raw.categories ?? []).map { TNACategory(name: $0.name, value: $0.value) }
+    }
+
+    // MARK: - Bulk lowest flight fares
+
+    func fetchBulkLowestFlights(originCityCode: String, period: Int) async throws -> [BulkLowestFare] {
+        if useMockData { return MRTMockData.bulkLowest(origin: originCityCode) }
+        let body = BulkLowestRequest(depCityCd: originCityCode, period: max(3, min(7, period)))
+        let raw: [BulkLowestItem] = try await postForData(
+            "/v1/products/flight/calendar/bulk-lowest",
+            body: body
+        )
+        return raw.compactMap { item in
+            guard let dep = item.departureDate, let ret = item.returnDate else { return nil }
+            return BulkLowestFare(
+                fromCity: item.fromCity ?? originCityCode,
+                toCity: item.toCity ?? "",
+                period: item.period ?? period,
+                departureDate: dep,
+                returnDate: ret,
+                totalPriceKRW: Int(item.totalPrice),
+                averagePriceKRW: item.averagePrice.map(Int.init)
+            )
+        }
+    }
+
+    // MARK: - Flight reservations
+
+    func fetchRecentFlightReservations(from startDate: Date, to endDate: Date) async throws -> [RemoteFlightReservation] {
+        if useMockData { return [] }
+        let env: MRTEnvelope<[FlightReservationItem]> = try await get(
+            "/v1/reservations/flight",
+            query: [
+                URLQueryItem(name: "startDate", value: dayFormatter.string(from: startDate)),
+                URLQueryItem(name: "endDate", value: dayFormatter.string(from: endDate))
+            ]
+        )
+        let items = env.data ?? []
+        return items.map { item in
+            RemoteFlightReservation(
+                reservationNo: item.reservationNo,
+                pnr: item.flightReservationNo,
+                airlineCode: item.airline ?? "",
+                airlineName: item.airlineName ?? "",
+                operationScope: item.operationScope ?? "",
+                tripType: item.tripType ?? "",
+                statusKor: item.statusKor ?? item.status ?? "",
+                reservedAt: dateTimeFormatter.date(from: item.reservedAt ?? ""),
+                cancelledAt: dateTimeFormatter.date(from: item.cancelledAt ?? ""),
+                issueNetKRW: Int(item.issueNet ?? 0)
+            )
+        }
+    }
+
     // MARK: - Revenues
 
     func fetchRevenues(
@@ -458,6 +654,12 @@ struct MRTClient: MRTClientProtocol {
     }
 
     private func koreanCityName(for city: String) -> String? {
+        TripParsingHelpers.koreanCityName(for: city)
+    }
+}
+
+enum TripParsingHelpers {
+    static func koreanCityName(for city: String) -> String? {
         let lookup: [String: String] = [
             "tokyo": "도쿄", "osaka": "오사카", "kyoto": "교토", "fukuoka": "후쿠오카",
             "sapporo": "삿포로", "okinawa": "오키나와", "nagoya": "나고야", "hiroshima": "히로시마",
@@ -586,6 +788,112 @@ private struct MyLinkRequest: Encodable {
 
 private struct MyLinkData: Decodable {
     let mylink: String
+}
+
+// TNA detail
+private struct TNADetailRequest: Encodable {
+    let gid: String
+}
+
+private struct TNADetailRaw: Decodable {
+    let gid: String
+    let title: String
+    let description: String?
+    let reviewScore: Double?
+    let reviewCount: Int?
+    let included: [String]?
+    let excluded: [String]?
+    let itineraries: [TNAItineraryRaw]?
+}
+
+private struct TNAItineraryRaw: Decodable {
+    let title: String?
+    let description: String?
+}
+
+// TNA options
+private struct TNAOptionsRequest: Encodable {
+    let gid: String
+    let selectedDate: String
+}
+
+private struct TNAOptionsRaw: Decodable {
+    let selectedDate: String?
+    let options: [TNAOptionRaw]?
+}
+
+private struct TNAOptionRaw: Decodable {
+    let id: Int64
+    let name: String
+    let salePrice: Int64
+    let currency: String?
+    let minPurchaseQuantity: Int?
+    let availablePurchaseQuantity: Int?
+}
+
+// TNA calendar
+private struct TNACalendarRequest: Encodable {
+    let gid: String
+    let selectedDate: String
+}
+
+private struct TNACalendarRaw: Decodable {
+    let date: String?
+    let basePrice: String?
+    let blockDates: [String]?
+    let excludedOptionDates: [String]?
+    let instantConfirm: Bool?
+}
+
+// TNA categories
+private struct TNACategoriesRequest: Encodable {
+    let city: String
+}
+
+private struct TNACategoriesRaw: Decodable {
+    let categories: [TNACategoryRaw]?
+    let totalCount: Int?
+}
+
+private struct TNACategoryRaw: Decodable {
+    let name: String
+    let value: String
+}
+
+// Bulk lowest flight fares
+private struct BulkLowestRequest: Encodable {
+    let depCityCd: String
+    let period: Int
+}
+
+private struct BulkLowestItem: Decodable {
+    let fromCity: String?
+    let toCity: String?
+    let period: Int?
+    let departureDate: String?
+    let returnDate: String?
+    let totalPrice: Int64
+    let airline: String?
+    let transfer: Int?
+    let averagePrice: Int64?
+}
+
+// Flight reservations
+private struct FlightReservationItem: Decodable {
+    let reservationNo: String
+    let flightReservationNo: String?
+    let operationScope: String?
+    let tripType: String?
+    let status: String?
+    let statusKor: String?
+    let airline: String?
+    let airlineName: String?
+    let reservedAt: String?
+    let cancelledAt: String?
+    let gid: Int64?
+    let categoryCode: String?
+    let linkId: String?
+    let issueNet: Int64?
 }
 
 private struct RevenueItem: Decodable {
@@ -765,6 +1073,71 @@ enum MRTMockData {
     }
 
     static func reservations() -> [RemoteReservation] { [] }
+
+    static func tnaDetail(gid: String) -> TNADetail {
+        TNADetail(
+            gid: gid,
+            title: "샘플 투어 상품",
+            description: "이건 mock 모드 더미 데이터입니다. 실제 데이터는 MRT 파트너 키 연결 후 표시됩니다.",
+            reviewScore: 4.7,
+            reviewCount: 128,
+            included: ["가이드 동행", "교통편 제공", "입장료"],
+            excluded: ["식사", "개인 경비"],
+            itineraries: [
+                TNAItineraryEntry(title: "오전 09:00", description: "호텔 픽업 후 첫 일정 시작"),
+                TNAItineraryEntry(title: "오후 14:00", description: "메인 명소 관광"),
+                TNAItineraryEntry(title: "오후 18:00", description: "호텔 샌딩")
+            ]
+        )
+    }
+
+    static func tnaOptions(gid: String, date: String) -> TNAOptionsBundle {
+        TNAOptionsBundle(
+            selectedDate: date,
+            options: [
+                TNAOptionEntry(id: 1, name: "성인 1인", salePriceKRW: 89_000, currency: "KRW", minPurchaseQuantity: 1, availablePurchaseQuantity: 8),
+                TNAOptionEntry(id: 2, name: "성인 2인 (커플)", salePriceKRW: 168_000, currency: "KRW", minPurchaseQuantity: 1, availablePurchaseQuantity: 4)
+            ]
+        )
+    }
+
+    static func tnaCalendar(date: String) -> TNACalendar {
+        let prefix = date.prefix(7)  // YYYY-MM
+        return TNACalendar(
+            date: String(prefix),
+            basePriceLabel: "8.9만",
+            blockDates: [],
+            instantConfirm: true
+        )
+    }
+
+    static func tnaCategories() -> [TNACategory] {
+        [
+            TNACategory(name: "전체", value: "all"),
+            TNACategory(name: "티켓·입장권", value: "ticket_v2"),
+            TNACategory(name: "투어", value: "tour"),
+            TNACategory(name: "이동·교통", value: "transportation_v2"),
+            TNACategory(name: "체험·클래스", value: "activity_class")
+        ]
+    }
+
+    static func bulkLowest(origin: String) -> [BulkLowestFare] {
+        let cal = Calendar(identifier: .gregorian)
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        let dep = cal.date(byAdding: .day, value: 30, to: .now) ?? .now
+        let ret = cal.date(byAdding: .day, value: 35, to: .now) ?? .now
+        let depStr = f.string(from: dep)
+        let retStr = f.string(from: ret)
+        return [
+            BulkLowestFare(fromCity: origin, toCity: "NRT", period: 5, departureDate: depStr, returnDate: retStr, totalPriceKRW: 472_300, averagePriceKRW: 580_000),
+            BulkLowestFare(fromCity: origin, toCity: "FUK", period: 5, departureDate: depStr, returnDate: retStr, totalPriceKRW: 326_800, averagePriceKRW: 420_000),
+            BulkLowestFare(fromCity: origin, toCity: "KIX", period: 5, departureDate: depStr, returnDate: retStr, totalPriceKRW: 388_000, averagePriceKRW: 510_000),
+            BulkLowestFare(fromCity: origin, toCity: "BKK", period: 5, departureDate: depStr, returnDate: retStr, totalPriceKRW: 326_300, averagePriceKRW: 549_000),
+            BulkLowestFare(fromCity: origin, toCity: "DAD", period: 5, departureDate: depStr, returnDate: retStr, totalPriceKRW: 412_000, averagePriceKRW: 580_000),
+            BulkLowestFare(fromCity: origin, toCity: "TPE", period: 5, departureDate: depStr, returnDate: retStr, totalPriceKRW: 298_500, averagePriceKRW: 380_000)
+        ]
+    }
 
     static func revenues() -> [RevenueLine] {
         [

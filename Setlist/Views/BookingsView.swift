@@ -5,6 +5,7 @@ struct BookingsView: View {
     @Query(sort: \BookedTrip.bookedAt, order: .reverse) private var bookings: [BookedTrip]
 
     @State private var remoteReservations: [RemoteReservation] = []
+    @State private var remoteFlightReservations: [RemoteFlightReservation] = []
     @State private var isRefreshing = false
     @State private var refreshError: String?
     @State private var didAutoRefresh = false
@@ -12,7 +13,7 @@ struct BookingsView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if bookings.isEmpty && remoteReservations.isEmpty && !isRefreshing {
+                if bookings.isEmpty && remoteReservations.isEmpty && remoteFlightReservations.isEmpty && !isRefreshing {
                     ContentUnavailableView(
                         "No booked trips",
                         systemImage: "ticket",
@@ -59,9 +60,16 @@ struct BookingsView: View {
                     }
                 }
                 if !remoteReservations.isEmpty {
-                    sectionHeader("From MyRealTrip")
+                    sectionHeader("From MyRealTrip · Tours & stays")
                     ForEach(remoteReservations) { reservation in
                         remoteTicketRow(reservation)
+                            .padding(.horizontal, 16)
+                    }
+                }
+                if !remoteFlightReservations.isEmpty {
+                    sectionHeader("From MyRealTrip · Flights")
+                    ForEach(remoteFlightReservations) { reservation in
+                        flightTicketRow(reservation)
                             .padding(.horizontal, 16)
                     }
                 }
@@ -146,6 +154,43 @@ struct BookingsView: View {
         .frame(height: 190)
     }
 
+    private func flightTicketRow(_ r: RemoteFlightReservation) -> some View {
+        let accent: Color = r.statusKor.contains("취소") ? .gray : .indigo
+        return TicketCard(accent: accent) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    statusPill(r.statusKor, color: accent)
+                    Spacer()
+                    Text(r.tripType.replacingOccurrences(of: "_", with: " "))
+                        .font(.caption2.bold())
+                        .foregroundStyle(.secondary)
+                }
+                HStack(spacing: 10) {
+                    Image(systemName: "airplane.departure")
+                        .font(.title2)
+                        .foregroundStyle(accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(r.airlineName.isEmpty ? r.airlineCode : r.airlineName)
+                            .font(.title3.bold())
+                            .lineLimit(1)
+                        Text("\(r.operationScope) · \(r.airlineCode)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        } bottom: {
+            TicketBottomSection(
+                leading: "PNR",
+                leadingValue: r.pnr ?? r.reservationNo,
+                trailing: "FARE",
+                trailingValue: r.issueNetKRW > 0 ? "₩\(r.issueNetKRW.formatted())" : "—",
+                seedForBarcode: r.id
+            )
+        }
+        .frame(height: 190)
+    }
+
     private func statusPill(_ text: String, color: Color) -> some View {
         Text(text)
             .font(.caption2.bold())
@@ -178,11 +223,18 @@ struct BookingsView: View {
         do {
             let cal = Calendar(identifier: .gregorian)
             let end = Date()
-            let start = cal.date(byAdding: .month, value: -6, to: end) ?? end
-            remoteReservations = try await AppEnvironment.mrtClient.fetchRecentReservations(
-                from: start,
-                to: end
+            let start6m = cal.date(byAdding: .month, value: -6, to: end) ?? end
+            // Flight reservation API caps at 1 month
+            let start1m = cal.date(byAdding: .month, value: -1, to: end) ?? end
+            async let general = AppEnvironment.mrtClient.fetchRecentReservations(
+                from: start6m, to: end
             )
+            async let flight = AppEnvironment.mrtClient.fetchRecentFlightReservations(
+                from: start1m, to: end
+            )
+            let (g, f) = try await (general, flight)
+            remoteReservations = g
+            remoteFlightReservations = f
         } catch {
             refreshError = error.localizedDescription
         }

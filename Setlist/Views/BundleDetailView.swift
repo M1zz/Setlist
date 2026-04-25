@@ -203,8 +203,8 @@ struct BundleDetailView: View {
                     .foregroundStyle(.secondary)
             }
             ForEach(Array(bundle.activities.enumerated()), id: \.element.id) { index, a in
-                Button {
-                    Task { await openItem(url: a.bookingURL) }
+                NavigationLink {
+                    TNADetailView(activity: a)
                 } label: {
                     HStack(alignment: .top, spacing: 12) {
                         if let url = a.thumbnailURL {
@@ -221,6 +221,7 @@ struct BundleDetailView: View {
                         }
                         VStack(alignment: .leading, spacing: 2) {
                             Text(a.title).bold().lineLimit(2)
+                                .foregroundStyle(.primary)
                             Text(activityCaption(a))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -228,6 +229,7 @@ struct BundleDetailView: View {
                         Spacer()
                         VStack(alignment: .trailing, spacing: 4) {
                             Text("₩\(a.priceKRW.formatted())")
+                                .foregroundStyle(.primary)
                             Image(systemName: "chevron.right").foregroundStyle(.tertiary).font(.caption)
                         }
                     }

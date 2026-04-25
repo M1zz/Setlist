@@ -4,8 +4,11 @@ struct HomeView: View {
     @State private var showConcertImport = false
     @State private var showContentImport = false
     @State private var pendingBundle: TravelBundle?
-    @State private var buildingTour: UpcomingTour?
+    @State private var buildingFareID: String?
     @State private var buildError: String?
+
+    @State private var fares: [BulkLowestFare] = []
+    @State private var isLoadingFares = false
 
     var body: some View {
         NavigationStack {
@@ -27,14 +30,12 @@ struct HomeView: View {
 
                     Divider().padding(.vertical, 8)
 
-                    trendingSection
+                    cheapTripsSection
                 }
                 .padding()
             }
             .navigationTitle("Setlist")
-            .sheet(isPresented: $showConcertImport) {
-                ConcertImportView()
-            }
+            .sheet(isPresented: $showConcertImport) { ConcertImportView() }
             .sheet(isPresented: $showContentImport) { ContentImportView() }
             .navigationDestination(item: $pendingBundle) { bundle in
                 BundleDetailView(bundle: bundle)
@@ -51,6 +52,8 @@ struct HomeView: View {
             } message: { msg in
                 Text(msg)
             }
+            .task { await loadFares() }
+            .refreshable { await loadFares() }
         }
     }
 
@@ -81,28 +84,56 @@ struct HomeView: View {
     }
 
     @ViewBuilder
-    private var trendingSection: some View {
+    private var cheapTripsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Tours on fans' minds")
-                .font(.title3.bold())
-            ForEach(UpcomingTour.samples) { tour in
-                tourRow(tour)
+            HStack {
+                Text("Cheapest from ICN")
+                    .font(.title3.bold())
+                Spacer()
+                if isLoadingFares { ProgressView().controlSize(.small) }
+            }
+            if fares.isEmpty && !isLoadingFares {
+                Text("No fares available right now.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(fares.prefix(8)) { fare in
+                fareRow(fare)
             }
         }
     }
 
-    private func tourRow(_ tour: UpcomingTour) -> some View {
+    private func fareRow(_ fare: BulkLowestFare) -> some View {
         Button {
-            Task { await buildTour(tour) }
+            Task { await buildFare(fare) }
         } label: {
-            HStack {
+            HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(tour.artist).font(.subheadline.bold())
-                    Text("\(tour.city) · \(tour.date.formatted(date: .abbreviated, time: .omitted))")
-                        .font(.caption).foregroundStyle(.secondary)
+                    Text(displayCity(for: fare.toCity))
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.primary)
+                    Text("\(fare.departureDate) → \(fare.returnDate) · \(fare.period)d")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
                 Spacer()
-                if buildingTour?.id == tour.id {
+                if let avg = fare.averagePriceKRW, avg > fare.totalPriceKRW {
+                    let pct = Int((1.0 - Double(fare.totalPriceKRW) / Double(avg)) * 100)
+                    if pct >= 5 {
+                        Text("-\(pct)%")
+                            .font(.caption2.bold())
+                            .foregroundStyle(.green)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.green.opacity(0.15), in: Capsule())
+                    }
+                }
+                VStack(alignment: .trailing, spacing: 0) {
+                    Text("₩\(fare.totalPriceKRW.formatted())")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.primary)
+                }
+                if buildingFareID == fare.id {
                     ProgressView()
                 } else {
                     Image(systemName: "chevron.right").foregroundStyle(.tertiary)
@@ -112,45 +143,85 @@ struct HomeView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(buildingTour != nil)
+        .disabled(buildingFareID != nil)
     }
 
     @MainActor
-    private func buildTour(_ tour: UpcomingTour) async {
-        buildingTour = tour
-        defer { buildingTour = nil }
+    private func loadFares() async {
+        isLoadingFares = true
+        defer { isLoadingFares = false }
+        do {
+            let fetched = try await AppEnvironment.mrtClient.fetchBulkLowestFlights(
+                originCityCode: "ICN",
+                period: 5
+            )
+            fares = fetched.sorted { $0.totalPriceKRW < $1.totalPriceKRW }
+        } catch {
+            // Use mock fallback if real call fails
+            fares = MRTMockData.bulkLowest(origin: "ICN")
+                .sorted { $0.totalPriceKRW < $1.totalPriceKRW }
+        }
+    }
 
-        let coords = CityDB.coordinates(for: tour.city) ?? (35.6762, 139.6503)
-        let country = CityDB.cities.first { $0.name == tour.city }?.country ?? "Japan"
-        let concert = ConcertSource(
-            artist: tour.artist,
-            venueName: "\(tour.city) Venue",
-            venueLatitude: coords.0,
-            venueLongitude: coords.1,
-            city: tour.city,
-            country: country,
-            showDate: tour.date
-        )
+    @MainActor
+    private func buildFare(_ fare: BulkLowestFare) async {
+        buildingFareID = fare.id
+        defer { buildingFareID = nil }
+
+        let cityName = cityName(forAirportOrCity: fare.toCity)
+        let coords = CityDB.coordinates(for: cityName) ?? (35.6762, 139.6503)
+        let country = CityDB.cities.first { $0.name == cityName }?.country ?? "Japan"
+
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = TimeZone(identifier: "Asia/Seoul")
+        guard let depart = f.date(from: fare.departureDate),
+              let ret = f.date(from: fare.returnDate) else {
+            buildError = "Invalid date in fare"
+            return
+        }
+
         let builder = BundleBuilder(mrt: AppEnvironment.mrtClient)
         do {
-            pendingBundle = try await builder.buildFromConcert(concert)
+            pendingBundle = try await builder.buildForCity(
+                city: cityName,
+                country: country,
+                latitude: coords.0,
+                longitude: coords.1,
+                departDate: depart,
+                returnDate: ret,
+                originAirport: fare.fromCity
+            )
         } catch {
             buildError = error.localizedDescription
         }
     }
-}
 
-struct UpcomingTour: Identifiable {
-    let id = UUID()
-    let artist: String
-    let city: String
-    let date: Date
+    private func displayCity(for code: String) -> String {
+        let mapped = airportToCity[code] ?? code
+        return mapped
+    }
 
-    static let samples: [UpcomingTour] = [
-        .init(artist: "BTS ARIRANG", city: "Tokyo", date: .now.addingTimeInterval(86400 * 45)),
-        .init(artist: "BTS ARIRANG", city: "London", date: .now.addingTimeInterval(86400 * 90)),
-        .init(artist: "BLACKPINK", city: "Los Angeles", date: .now.addingTimeInterval(86400 * 60)),
-        .init(artist: "Stray Kids", city: "Madrid", date: .now.addingTimeInterval(86400 * 75))
+    private func cityName(forAirportOrCity code: String) -> String {
+        airportToCity[code] ?? code
+    }
+
+    // Reverse map of common IATA airport / city codes returned by bulk-lowest.
+    private let airportToCity: [String: String] = [
+        "NRT": "Tokyo", "HND": "Tokyo", "TYO": "Tokyo",
+        "KIX": "Osaka", "ITM": "Osaka", "OSA": "Osaka",
+        "FUK": "Fukuoka", "CTS": "Sapporo", "OKA": "Okinawa",
+        "NGO": "Nagoya", "OIT": "Yufuin", "HIJ": "Hiroshima",
+        "BKK": "Bangkok", "HKT": "Phuket", "CNX": "Chiang Mai",
+        "SIN": "Singapore", "HAN": "Hanoi", "SGN": "Ho Chi Minh City",
+        "DAD": "Da Nang", "DPS": "Bali", "MNL": "Manila",
+        "CEB": "Cebu", "TPE": "Taipei", "KHH": "Kaohsiung",
+        "LHR": "London", "CDG": "Paris", "FCO": "Rome",
+        "BCN": "Barcelona", "MAD": "Madrid", "AMS": "Amsterdam",
+        "BER": "Berlin", "JFK": "New York", "LAX": "Los Angeles",
+        "LAS": "Las Vegas", "SFO": "San Francisco", "HNL": "Honolulu",
+        "GUM": "Guam", "DXB": "Dubai", "IST": "Istanbul",
+        "ICN": "Seoul", "CJU": "Jeju", "PUS": "Busan"
     ]
 }
 

@@ -95,6 +95,47 @@ struct BundleBuilder {
         )
     }
 
+    func buildForCity(
+        city: String,
+        country: String,
+        latitude: Double,
+        longitude: Double,
+        departDate: Date,
+        returnDate: Date,
+        originAirport: String = "ICN",
+        travelers: Int = 1
+    ) async throws -> TravelBundle {
+        async let flights = mrt.searchFlights(
+            from: originAirport,
+            to: airportCode(for: city),
+            departDate: departDate,
+            returnDate: returnDate,
+            passengers: travelers
+        )
+        async let hotels = mrt.searchHotelsNear(
+            city: city,
+            latitude: latitude,
+            longitude: longitude,
+            radiusMeters: 3000,
+            checkIn: departDate,
+            checkOut: returnDate,
+            guests: travelers
+        )
+        async let activities = mrt.searchActivities(city: city, date: departDate)
+
+        let (f, h, a) = try await (flights, hotels, activities)
+        return TravelBundle(
+            id: UUID(),
+            source: .manual,
+            flights: f,
+            hotels: h,
+            activities: a,
+            suggestedDepartureDate: departDate,
+            suggestedReturnDate: returnDate,
+            travelerCount: travelers
+        )
+    }
+
     private func airportCode(for city: String) -> String {
         // Minimal lookup. MRT's flight calendar accepts either city or airport
         // codes for common hubs; we pass airport codes here because the

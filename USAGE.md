@@ -13,8 +13,11 @@
 5. [시나리오 D — 트렌딩 투어 카드 탭](#시나리오-d--트렌딩-투어-카드-탭)
 6. [시나리오 E — 위시리스트 · 예약 내역](#시나리오-e--위시리스트--예약-내역)
 7. [시나리오 F — 수입(커미션) API 검증](#시나리오-f--수입커미션-api-검증)
-8. [파서가 지원하는 것 · 못하는 것](#파서가-지원하는-것--못하는-것)
-9. [테스트 데이터 일람](#테스트-데이터-일람)
+8. [시나리오 G — TNA 상세 in-app 탐색](#시나리오-g--tna-상세-in-app-탐색)
+9. [시나리오 H — Discover 트렌딩 (실시간 최저가)](#시나리오-h--discover-트렌딩-실시간-최저가)
+10. [시나리오 I — MCP 서버 연결](#시나리오-i--mcp-서버-연결)
+11. [파서가 지원하는 것 · 못하는 것](#파서가-지원하는-것--못하는-것)
+12. [테스트 데이터 일람](#테스트-데이터-일람)
 
 ---
 
@@ -335,6 +338,145 @@ curl -sS -H "Authorization: Bearer $MRT_KEY" \
 - **`data=[]` 인데 예약은 분명히 있음**: `dateSearchType`을 `PAYMENT` → `SETTLEMENT`으로 바꿔보기. 정산일 기준이면 다음날 6AM 전까지는 비어있음.
 - **`status: 403, "해당 API Key는 리소스 사용 권한이 없습니다"`**: 파트너 페이지에서 Open API 접근권한 확인. marketing_partner@myrealtrip.com 에 문의.
 - **앱 Revenue 탭이 항상 Mock 데이터**: `AppEnvironment.useMockMRT == true`인 상태. 빌드 스크립트가 Keychain 키를 못 읽은 것. `Secrets.plist` 빌드 결과를 확인하고 빌드 로그에서 `Secrets.plist generated (MRT key: N chars)` N이 0이면 Keychain에 키 저장 필요.
+
+---
+
+## 시나리오 G — TNA 상세 in-app 탐색
+
+> **상황**: 번들 상세에서 활동(activity) row 탭하면 Safari 대신 **앱 내 상세 화면**으로 진입. 일정·포함/불포함·날짜별 옵션을 실시간 조회.
+> **연동 endpoint**: `tna/detail` + `tna/options` + `tna/calendars`
+
+### 플로우
+1. Discover → BTS Tokyo Dome 카드 (또는 Concert 입력) → BundleDetailView
+2. **Add-on activities** 섹션의 row 탭 → `TNADetailView` 푸시
+3. 화면 구성:
+   - 상단: 썸네일 + 상품명 + 리뷰 평점/카운트
+   - **About**: HTML 포함된 상세 설명
+   - **What's included**: 포함 항목 (체크) + 불포함 (X)
+   - **Itinerary**: 일정 단계 리스트
+   - **Pick a date**: DatePicker → 날짜 변경 시 options/calendars 자동 재호출
+   - **Available options**: 선택 날짜의 예약 가능 옵션 + 가격 + 잔여석
+   - 하단 sticky: "Starting at ₩X / Book on MyRealTrip" → mylink 발급 후 Safari
+4. 캘린더에서 받은 `blockDates` 정보로 sold-out 표시, `instantConfirm` 여부도 pill로 노출
+
+### 빠른 검증
+```bash
+KEY=$(security find-generic-password -a "$USER" -s "myrealtrip-partner-api" -w)
+GID=3417854
+curl -sS -X POST "https://partner-ext-api.myrealtrip.com/v1/products/tna/detail" \
+  -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d "{\"gid\":\"$GID\"}" | python3 -m json.tool | head -25
+```
+→ `data.title`, `description`, `included`, `excluded`, `itineraries`, `reviewScore`(4.97...), `reviewCount`(3500+) 확인됨.
+
+---
+
+## 시나리오 H — Discover 트렌딩 (실시간 최저가)
+
+> **상황**: 홈 화면 "Cheapest from ICN" 섹션이 더 이상 mock 데이터가 아니라 `/v1/products/flight/calendar/bulk-lowest` 응답으로 동적 채워짐.
+> **연동 endpoint**: `POST /v1/products/flight/calendar/bulk-lowest` (국제선만)
+
+### 플로우
+1. 앱 실행 → Discover 탭 → `loadFares()`가 자동 호출됨
+2. ICN 출발 5일 여행 기준 전 목적지 최저가 받아 가격순 정렬 → 상위 8개 표시
+3. 각 row:
+   - 도시명 (IATA → 도시 매핑 테이블), 출발/귀국 날짜, 기간
+   - **할인율 pill**: `averagePrice` 대비 5% 이상 싸면 `-N%` 초록 뱃지
+   - 가격 (₩) + chevron
+4. row 탭 → `BundleBuilder.buildForCity(...)` 즉시 호출 → 상세 진입
+5. Pull-to-refresh로 가격 갱신
+
+### 실측 데이터 (방금 호출)
+```
+FUK ₩160,400  2026-05-03 → 2026-05-07
+YGJ ₩165,100  2026-05-03 → 2026-05-07
+HIJ ₩167,100  2026-07-05 → 2026-07-09
+TAK ₩167,400  2026-05-03 → 2026-05-07
+KIX ₩172,800  2026-05-03 → 2026-05-07
+```
+ICN 출발 5일 여행 145개 목적지 중 최저 ₩160k (후쿠오카).
+
+### 옵션
+원하면 다른 도시도 추가 가능:
+- `fetchBulkLowestFlights(originCityCode: "KIX", period: 5)` — 오사카발
+- 다중 출발지 카드 만들면 OD 매트릭스 형태로 확장 가능
+
+---
+
+## 시나리오 I — MCP 서버 연결
+
+> **상황**: MRT가 자체 MCP(Model Context Protocol) 서버를 운영. Claude Desktop / Cursor / Cline 등에서 한 줄 설정으로 항공·숙소·TNA 검색 도구를 자연어로 쓸 수 있다.
+> **엔드포인트**: `https://mcp-servers.myrealtrip.com/mcp`
+> **앱 자체와는 별개** — 사용자(M1zz) 본인이 글 쓰거나 자료 만들 때, AI 에이전트가 MRT 상품을 직접 조회하게 되는 흐름.
+
+### 제공 도구 11개
+
+| 카테고리 | 도구 | 용도 |
+|:---|:---|:---|
+| 숙소 | `searchStays` | 키워드/날짜로 숙소 검색 |
+| 숙소 | `stayDetail` | 객실/리뷰/편의시설 |
+| 항공 | `searchDomesticFlights` | 김포-제주, 김포-부산 등 |
+| 항공 | `searchInternationalFlights` | 일본/동남아/유럽 |
+| 항공 | `getFlightPromotions` | 프로모션 항공사 |
+| 항공 | `searchFlightCalendar` | 날짜별 최저가 |
+| TNA | `searchTnas` | 투어/티켓/액티비티 검색 |
+| TNA | `tnaDetail` | 상품 상세 |
+| TNA | `tnaOptions` | 날짜별 예약 가능 옵션 |
+| TNA | `tnaCategories` | 도시별 카테고리 |
+| 공통 | `getKst` | 한국 시간 |
+
+### Claude Code (당신이 지금 쓰는 환경)
+```bash
+claude mcp add --transport http myrealtrip https://mcp-servers.myrealtrip.com/mcp
+```
+또는 `~/.claude.json` (혹은 프로젝트별 `.mcp.json`)에 직접:
+```json
+{
+  "mcpServers": {
+    "myrealtrip": {
+      "transport": "http",
+      "url": "https://mcp-servers.myrealtrip.com/mcp"
+    }
+  }
+}
+```
+
+### Claude Desktop
+Settings → Connectors → Custom 탭 → `+` 클릭 →
+- 이름: `myrealtrip`
+- 주소: `https://mcp-servers.myrealtrip.com/mcp`
+
+### Cursor / Windsurf / Cline (`mcp.json`)
+```json
+{
+  "mcpServers": {
+    "myrealtrip": {
+      "url": "https://mcp-servers.myrealtrip.com/mcp"
+    }
+  }
+}
+```
+- Cursor: Settings → Tools & MCP → "+ Add new MCP server"
+- Windsurf: `~/.codeium/windsurf/mcp_config.json`
+- Cline: VS Code Cline 아이콘 → MCP Servers → Remote Servers
+
+### Codex CLI / Gemini CLI
+터미널에서 가이드 따라 설정 (각 CLI 자체 명령). 등록 후 자동 로드.
+
+### 활용 예시 (Claude Desktop에서)
+> "내일 제주도 가는 항공편 찾아줘"
+→ `searchDomesticFlights` 자동 호출
+
+> "부산 해운대 근처 호텔 추천"
+→ `searchStays`로 부산 숙소 + 평점 반환
+
+> "오사카 유니버설 스튜디오 티켓 가격"
+→ `searchTnas` → `tnaDetail` → 1일권/익스프레스 패스 옵션과 날짜별 가격
+
+### 본 앱과의 차이점
+- 본 앱: Setlist iOS가 직접 partner API 호출 → 번들 표시 → mylink로 결제 유도
+- MCP: Claude/Cursor가 MRT API를 직접 호출 → 자연어 질의 응답
+- **두 흐름 모두 같은 API 자원을 쓰므로 데이터 일관성은 보장됨.** 단, MCP 호출은 mylink 귀속이 안 되므로 **커미션은 발생하지 않음**. 본 앱이 수익원이고, MCP는 작업 도우미 역할.
 
 ---
 
