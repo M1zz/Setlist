@@ -3,6 +3,9 @@ import SwiftData
 
 struct BookingsView: View {
     @Query(sort: \BookedTrip.bookedAt, order: .reverse) private var bookings: [BookedTrip]
+    @Query(sort: \BookingIntent.createdAt, order: .reverse) private var intents: [BookingIntent]
+    @Environment(\.modelContext) private var context
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var remoteReservations: [RemoteReservation] = []
     @State private var remoteFlightReservations: [RemoteFlightReservation] = []
@@ -13,7 +16,7 @@ struct BookingsView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if bookings.isEmpty && remoteReservations.isEmpty && remoteFlightReservations.isEmpty && !isRefreshing {
+                if bookings.isEmpty && remoteReservations.isEmpty && remoteFlightReservations.isEmpty && intents.isEmpty && !isRefreshing {
                     ContentUnavailableView(
                         "No booked trips",
                         systemImage: "ticket",
@@ -46,12 +49,24 @@ struct BookingsView: View {
                 didAutoRefresh = true
                 await refresh()
             }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .active && !AppEnvironment.useMockMRT {
+                    Task { await refresh() }
+                }
+            }
         }
     }
 
     private var content: some View {
         ScrollView {
             LazyVStack(spacing: 20) {
+                if !intents.isEmpty {
+                    sectionHeader("My recent bookings")
+                    ForEach(intents) { intent in
+                        intentTicketRow(intent)
+                            .padding(.horizontal, 16)
+                    }
+                }
                 if !bookings.isEmpty {
                     sectionHeader("Opened from this device")
                     ForEach(bookings) { trip in
@@ -154,6 +169,52 @@ struct BookingsView: View {
         .frame(height: 190)
     }
 
+    private func intentTicketRow(_ intent: BookingIntent) -> some View {
+        let (label, accent): (String, Color) = {
+            switch intent.status {
+            case "confirmed": return ("CONFIRMED · \(intent.statusKor ?? "예약확정")", .green)
+            case "expired":   return ("PENDING · attribution lapsed", .orange)
+            default:
+                return (intent.isAttributionWindowOpen ? "PENDING" : "PENDING · cookie expired", .blue)
+            }
+        }()
+        return TicketCard(accent: accent) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    statusPill(label, color: accent)
+                    Spacer()
+                    Text(intent.productCategory)
+                        .font(.caption2.bold())
+                        .foregroundStyle(.secondary)
+                }
+                Text(intent.title)
+                    .font(.title3.bold())
+                    .lineLimit(2)
+                    .padding(.top, 2)
+                Text("Tagged \(intent.id.uuidString.prefix(8))…")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        } bottom: {
+            TicketBottomSection(
+                leading: "STARTED",
+                leadingValue: intent.createdAt.formatted(date: .abbreviated, time: .shortened),
+                trailing: intent.status == "confirmed" ? "PRICE" : "STATUS",
+                trailingValue: intent.status == "confirmed"
+                    ? (intent.actualSalePriceKRW > 0 ? "₩\(intent.actualSalePriceKRW.formatted())" : "—")
+                    : intent.status.uppercased(),
+                seedForBarcode: intent.id.uuidString
+            )
+        }
+        .frame(height: 190)
+        .swipeActions {
+            Button(role: .destructive) {
+                context.delete(intent)
+                try? context.save()
+            } label: { Image(systemName: "trash") }
+        }
+    }
+
     private func flightTicketRow(_ r: RemoteFlightReservation) -> some View {
         let accent: Color = r.statusKor.contains("취소") ? .gray : .indigo
         return TicketCard(accent: accent) {
@@ -235,9 +296,33 @@ struct BookingsView: View {
             let (g, f) = try await (general, flight)
             remoteReservations = g
             remoteFlightReservations = f
+            reconcileIntents(against: g)
         } catch {
             refreshError = error.localizedDescription
         }
+    }
+
+    private func reconcileIntents(against reservations: [RemoteReservation]) {
+        guard !intents.isEmpty else { return }
+        let byUtm: [String: RemoteReservation] = Dictionary(
+            uniqueKeysWithValues: reservations
+                .compactMap { r in r.utmContent.map { ($0, r) } }
+        )
+        var dirty = false
+        for intent in intents where intent.status == "pending" {
+            if let r = byUtm[intent.id.uuidString] {
+                intent.status = "confirmed"
+                intent.reservationNo = r.id
+                intent.statusKor = r.statusKor
+                intent.actualSalePriceKRW = r.salePriceKRW
+                intent.resolvedAt = .now
+                dirty = true
+            } else if !intent.isAttributionWindowOpen {
+                intent.status = "expired"
+                dirty = true
+            }
+        }
+        if dirty { try? context.save() }
     }
 }
 

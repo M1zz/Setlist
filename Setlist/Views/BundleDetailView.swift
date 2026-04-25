@@ -117,7 +117,12 @@ struct BundleDetailView: View {
             }
             ForEach(Array(bundle.flights.enumerated()), id: \.element.id) { index, f in
                 Button {
-                    Task { await openItem(url: f.bookingURL) }
+                    Task { await openItem(
+                        url: f.bookingURL,
+                        title: "\(f.airline) \(f.fromAirport)→\(f.toAirport)",
+                        category: "FLIGHT",
+                        gid: f.mrtProductID
+                    ) }
                 } label: {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
@@ -154,7 +159,12 @@ struct BundleDetailView: View {
             }
             ForEach(Array(bundle.hotels.enumerated()), id: \.element.id) { index, h in
                 Button {
-                    Task { await openItem(url: h.bookingURL) }
+                    Task { await openItem(
+                        url: h.bookingURL,
+                        title: h.name,
+                        category: "HOTEL",
+                        gid: h.mrtProductID
+                    ) }
                 } label: {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
@@ -294,22 +304,70 @@ struct BundleDetailView: View {
         guard let target = primaryBookingURL else { return }
         isOpeningBooking = true
         defer { isOpeningBooking = false }
+
+        // "Book all" picks the most-trackable item: hotel > activity > flight,
+        // because MRT's flight reservation API doesn't surface utm_content.
+        let intent: BookingIntent? = {
+            if let h = bundle.hotels.first {
+                return BookingIntent(
+                    title: h.name,
+                    productCategory: "HOTEL",
+                    productGid: h.mrtProductID,
+                    targetURLString: h.bookingURL.absoluteString,
+                    ticketImageData: ticketImageData
+                )
+            }
+            if let a = bundle.activities.first {
+                return BookingIntent(
+                    title: a.title,
+                    productCategory: "TNA",
+                    productGid: a.mrtProductID,
+                    targetURLString: a.bookingURL.absoluteString,
+                    ticketImageData: ticketImageData
+                )
+            }
+            return nil
+        }()
+
+        let urlToOpen: URL
+        if let intent {
+            context.insert(intent)
+            try? context.save()
+            urlToOpen = URL(string: intent.targetURLString) ?? target
+        } else {
+            urlToOpen = target  // flight-only — no utm tracking possible
+        }
+
         do {
-            let trackedURL = try await AppEnvironment.mrtClient.generateMyLink(targetURL: target)
+            let trackedURL = try await AppEnvironment.mrtClient.generateMyLink(
+                targetURL: urlToOpen,
+                utmContent: intent?.id.uuidString
+            )
             _ = await UIApplication.shared.open(trackedURL)
             recordBooking(url: trackedURL)
         } catch {
-            // MyLink generation failed (no key, network, or rate limit).
-            // Fall back to the raw URL so the user still reaches MyRealTrip.
-            _ = await UIApplication.shared.open(target)
+            _ = await UIApplication.shared.open(urlToOpen)
             bookingError = error.localizedDescription
         }
     }
 
     @MainActor
-    private func openItem(url: URL) async {
+    private func openItem(url: URL, title: String, category: String, gid: String) async {
+        let intent = BookingIntent(
+            title: title,
+            productCategory: category,
+            productGid: gid,
+            targetURLString: url.absoluteString,
+            ticketImageData: ticketImageData
+        )
+        context.insert(intent)
+        try? context.save()
+
         do {
-            let tracked = try await AppEnvironment.mrtClient.generateMyLink(targetURL: url)
+            let tracked = try await AppEnvironment.mrtClient.generateMyLink(
+                targetURL: url,
+                utmContent: intent.id.uuidString
+            )
             _ = await UIApplication.shared.open(tracked)
         } catch {
             _ = await UIApplication.shared.open(url)

@@ -29,7 +29,7 @@ protocol MRTClientProtocol {
         date: Date
     ) async throws -> [ActivityOption]
 
-    func generateMyLink(targetURL: URL) async throws -> URL
+    func generateMyLink(targetURL: URL, utmContent: String?) async throws -> URL
 
     func fetchRecentReservations(
         from startDate: Date,
@@ -67,10 +67,13 @@ protocol MRTClientProtocol {
 struct RemoteReservation: Identifiable, Hashable {
     let id: String          // reservationNo
     let title: String
+    let category: String
     let statusKor: String
     let reservedAt: Date?
     let tripStartedAt: Date?
     let salePriceKRW: Int
+    let utmContent: String?
+    let linkId: String?
 }
 
 enum RevenueDateType: String, Hashable {
@@ -383,11 +386,24 @@ struct MRTClient: MRTClientProtocol {
 
     // MARK: - MyLink (partner-attributed short URL)
 
-    func generateMyLink(targetURL: URL) async throws -> URL {
-        if useMockData { return targetURL }
-        let body = MyLinkRequest(targetUrl: targetURL.absoluteString)
+    func generateMyLink(targetURL: URL, utmContent: String?) async throws -> URL {
+        // Append utm_content as a query item on the targetUrl so it round-trips
+        // through MRT's bridge and ends up on the reservation row.
+        let urlWithTag: URL = {
+            guard let tag = utmContent, !tag.isEmpty,
+                  var comps = URLComponents(url: targetURL, resolvingAgainstBaseURL: false)
+            else { return targetURL }
+            var items = comps.queryItems ?? []
+            items.removeAll { $0.name == "utm_content" }
+            items.append(URLQueryItem(name: "utm_content", value: tag))
+            comps.queryItems = items
+            return comps.url ?? targetURL
+        }()
+
+        if useMockData { return urlWithTag }
+        let body = MyLinkRequest(targetUrl: urlWithTag.absoluteString)
         let data: MyLinkData = try await postForData("/v1/mylink", body: body)
-        return URL(string: data.mylink) ?? targetURL
+        return URL(string: data.mylink) ?? urlWithTag
     }
 
     // MARK: - Reservations
@@ -410,10 +426,13 @@ struct MRTClient: MRTClientProtocol {
             RemoteReservation(
                 id: item.reservationNo,
                 title: item.productTitle ?? "Trip",
+                category: item.productCategory ?? "",
                 statusKor: item.statusKor ?? item.status ?? "",
                 reservedAt: dateTimeFormatter.date(from: item.reservedAt ?? ""),
                 tripStartedAt: dateTimeFormatter.date(from: item.tripStartedAt ?? ""),
-                salePriceKRW: Int(item.salePrice ?? 0)
+                salePriceKRW: Int(item.salePrice ?? 0),
+                utmContent: item.utmContent,
+                linkId: item.linkId
             )
         }
     }
@@ -932,6 +951,7 @@ private struct ReservationItem: Decodable {
     let quantity: Int?
     let city: String?
     let country: String?
+    let utmContent: String?
 }
 
 // MARK: - Envelope

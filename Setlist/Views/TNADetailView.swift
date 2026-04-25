@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TNADetailView: View {
     let activity: ActivityOption
+    @Environment(\.modelContext) private var context
 
     @State private var detail: TNADetail?
     @State private var calendar: TNACalendar?
@@ -301,8 +302,22 @@ struct TNADetailView: View {
     private func openBooking() async {
         isOpeningBooking = true
         defer { isOpeningBooking = false }
+
+        let intent = BookingIntent(
+            title: detail?.title ?? activity.title,
+            productCategory: "TNA",
+            productGid: activity.mrtProductID,
+            targetURLString: activity.bookingURL.absoluteString,
+            actualSalePriceKRW: lowestOptionPriceKRW
+        )
+        context.insert(intent)
+        try? context.save()
+
         do {
-            let tracked = try await AppEnvironment.mrtClient.generateMyLink(targetURL: activity.bookingURL)
+            let tracked = try await AppEnvironment.mrtClient.generateMyLink(
+                targetURL: activity.bookingURL,
+                utmContent: intent.id.uuidString
+            )
             _ = await UIApplication.shared.open(tracked)
         } catch {
             _ = await UIApplication.shared.open(activity.bookingURL)

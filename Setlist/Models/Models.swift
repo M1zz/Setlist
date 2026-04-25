@@ -126,6 +126,60 @@ final class SavedTrip {
     }
 }
 
+// User-initiated booking attempt. Created the moment the user taps a Book
+// CTA, before opening Safari. Reconciled later by matching the local
+// `id.uuidString` against `/v1/reservations` response's `utmContent` field.
+
+@Model
+final class BookingIntent {
+    var id: UUID
+    var createdAt: Date
+    var resolvedAt: Date?
+    var title: String
+    var productCategory: String       // "TNA", "HOTEL", "FLIGHT"
+    var productGid: String
+    var targetURLString: String
+    var status: String                // "pending", "confirmed", "expired"
+    var reservationNo: String?
+    var statusKor: String?
+    var actualSalePriceKRW: Int
+    var ticketImageData: Data?
+
+    init(
+        id: UUID = UUID(),
+        createdAt: Date = .now,
+        resolvedAt: Date? = nil,
+        title: String,
+        productCategory: String,
+        productGid: String,
+        targetURLString: String,
+        status: String = "pending",
+        reservationNo: String? = nil,
+        statusKor: String? = nil,
+        actualSalePriceKRW: Int = 0,
+        ticketImageData: Data? = nil
+    ) {
+        self.id = id
+        self.createdAt = createdAt
+        self.resolvedAt = resolvedAt
+        self.title = title
+        self.productCategory = productCategory
+        self.productGid = productGid
+        self.targetURLString = targetURLString
+        self.status = status
+        self.reservationNo = reservationNo
+        self.statusKor = statusKor
+        self.actualSalePriceKRW = actualSalePriceKRW
+        self.ticketImageData = ticketImageData
+    }
+
+    var isAttributionWindowOpen: Bool {
+        // 24h cookie window from MRT. After this, even if user books, no
+        // commission is attributed; keep the record but mark expired.
+        Date().timeIntervalSince(createdAt) < 86_400
+    }
+}
+
 @Model
 final class BookedTrip {
     var id: UUID

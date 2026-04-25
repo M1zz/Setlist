@@ -16,6 +16,7 @@
 8. [시나리오 G — TNA 상세 in-app 탐색](#시나리오-g--tna-상세-in-app-탐색)
 9. [시나리오 H — Discover 트렌딩 (실시간 최저가)](#시나리오-h--discover-트렌딩-실시간-최저가)
 10. [시나리오 I — MCP 서버 연결](#시나리오-i--mcp-서버-연결)
+11. [시나리오 J — 사용자별 예약 추적 (BookingIntent)](#시나리오-j--사용자별-예약-추적-bookingintent)
 11. [파서가 지원하는 것 · 못하는 것](#파서가-지원하는-것--못하는-것)
 12. [테스트 데이터 일람](#테스트-데이터-일람)
 
@@ -338,6 +339,60 @@ curl -sS -H "Authorization: Bearer $MRT_KEY" \
 - **`data=[]` 인데 예약은 분명히 있음**: `dateSearchType`을 `PAYMENT` → `SETTLEMENT`으로 바꿔보기. 정산일 기준이면 다음날 6AM 전까지는 비어있음.
 - **`status: 403, "해당 API Key는 리소스 사용 권한이 없습니다"`**: 파트너 페이지에서 Open API 접근권한 확인. marketing_partner@myrealtrip.com 에 문의.
 - **앱 Revenue 탭이 항상 Mock 데이터**: `AppEnvironment.useMockMRT == true`인 상태. 빌드 스크립트가 Keychain 키를 못 읽은 것. `Secrets.plist` 빌드 결과를 확인하고 빌드 로그에서 `Secrets.plist generated (MRT key: N chars)` N이 0이면 Keychain에 키 저장 필요.
+
+---
+
+## 시나리오 J — 사용자별 예약 추적 (BookingIntent)
+
+> **상황**: 사용자가 앱에서 Book 버튼 누르면 그 행동을 로컬에 기록하고, MRT에서 결제 완료 후 자동으로 매칭. 결제 → 앱 복귀 → "내 예약" 섹션에 자동 등장.
+> **연동 메커니즘**: `utm_content` 라운드트립 + scene activation 시 reconcile
+
+### 작동 흐름
+1. 사용자 앱에서 활동/호텔 row 탭 또는 TNA 상세에서 `Book on MyRealTrip` 탭
+2. 앱이 **로컬에 BookingIntent 생성** (UUID, 상품명, gid, 카테고리, 시각)
+3. 앱이 `targetUrl`에 `?utm_content={UUID}` 추가
+4. `/v1/mylink` 호출 → 단축 URL 발급 → Safari로 이동
+5. 사용자 MRT에서 결제 완료 (또는 그냥 닫음)
+6. 앱 다시 켜면(scene becomes active) `/v1/reservations`를 자동 호출
+7. 응답의 `utmContent` 필드와 로컬 `BookingIntent.id` 매칭 → 매칭되면:
+   - `status` = `confirmed`
+   - `reservationNo`, `statusKor`, 실결제금액 채움
+8. Trips 탭 **My recent bookings** 섹션이 즉시 갱신 (`PENDING` 회색 → `CONFIRMED · 예약확정` 초록색)
+
+### Trips 탭 4단 구조
+| 섹션 | 출처 | 내용 |
+|:---|:---|:---|
+| **My recent bookings** | 로컬 (`BookingIntent`) | 사용자 본인이 시작한 예약 시도 + reconcile 상태 |
+| **Opened from this device** | 로컬 (`BookedTrip`) | "Book all" 버튼으로 열어본 번들 (legacy) |
+| **From MyRealTrip · Tours & stays** | `/v1/reservations` | 파트너 전체(M1zz의 모든 mylink로 발생한 예약) |
+| **From MyRealTrip · Flights** | `/v1/reservations/flight` | 파트너 전체 항공 예약 |
+
+### Status 라이프사이클
+- `pending` (회색/파랑): 사용자가 Book 탭만 누른 상태. 24h 안에 결제 완료해야 커미션 귀속
+- `confirmed` (초록): MRT에서 매칭 발견. 예약번호·실결제가·상태 채워짐
+- `expired` (주황): 24h 지났는데 매칭 없음. 결제 안 했거나 다른 채널로 결제
+
+### 제약
+- **항공 예약은 매칭 불가**: `/v1/reservations/flight`에 `utmContent` 필드가 없음(MRT API 한계). 항공 BookingIntent는 영구 `pending`. 비행 매칭은 `linkId` 기반인데 그건 파트너 전체 공통이라 개별 식별 안 됨.
+- **TNA + 호텔만 추적 가능**: `/v1/reservations`에는 utmContent 그대로 돌아옴 ✓
+- **여러 디바이스 분리 안 됨**: 모든 사용자가 같은 파트너 키로 동작. 본 구현은 *내 디바이스에서 시작한 의도*만 매칭. 여러 사용자에게 배포할 거면 backend proxy + per-user auth 필요.
+
+### 빠른 검증 코스
+1. 시뮬레이터에서 Discover → 트렌딩 → Build → activity row 탭 → TNADetailView → `Book on MyRealTrip`
+2. 앱이 자동으로 Safari 열고 `myrealt.rip/...` 방문
+3. URL bar에 `utm_content={UUID}` 보임 (생성된 intent의 ID와 일치)
+4. **여기서 실제로 결제하지 않아도 됨** — Safari 닫고 앱 복귀
+5. Trips 탭 → "My recent bookings"에 `PENDING` 카드 1개 보임
+6. 만약 실제 결제 완료했다면, 다음 앱 활성화 시 자동으로 `CONFIRMED`로 전환됨
+
+### Curl로 직접 검증
+```bash
+KEY=$(security find-generic-password -a "$USER" -s "myrealtrip-partner-api" -w)
+# 어떤 utm_content 값으로 들어온 예약이 있는지 확인:
+curl -sS -H "Authorization: Bearer $KEY" \
+  "https://partner-ext-api.myrealtrip.com/v1/reservations?dateSearchType=RESERVATION_DATE&startDate=$(date -v-7d +%Y-%m-%d)&endDate=$(date +%Y-%m-%d)" \
+  | python3 -c "import sys, json; [print(r.get('reservationNo'), '←', r.get('utmContent')) for r in json.load(sys.stdin).get('data',[])]"
+```
 
 ---
 

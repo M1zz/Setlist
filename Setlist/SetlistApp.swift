@@ -7,7 +7,7 @@ struct SetlistApp: App {
         WindowGroup {
             RootView()
         }
-        .modelContainer(for: [SavedTrip.self, BookedTrip.self])
+        .modelContainer(for: [SavedTrip.self, BookedTrip.self, BookingIntent.self])
     }
 }
 
