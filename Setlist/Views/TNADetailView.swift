@@ -7,6 +7,7 @@ struct TNADetailView: View {
     @State private var detail: TNADetail?
     @State private var calendar: TNACalendar?
     @State private var options: TNAOptionsBundle?
+    @State private var heroImage: OpenverseImage?
     @State private var selectedDate: Date = Date().addingTimeInterval(86400 * 14)
     @State private var isLoadingDetail = false
     @State private var isLoadingOptions = false
@@ -61,18 +62,28 @@ struct TNADetailView: View {
 
     private var heroCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if let url = activity.thumbnailURL {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let img):
-                        img.resizable().scaledToFill()
-                    default:
-                        Color.gray.opacity(0.1)
+            ZStack(alignment: .bottomTrailing) {
+                if let url = activity.thumbnailURL {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let img):
+                            img.resizable().scaledToFill()
+                        default:
+                            RichImageView(topic: activity.title, fallbackTint: .pink)
+                        }
+                    }
+                    .frame(height: 220)
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                } else {
+                    RichImageView(topic: activity.title, fallbackTint: .pink) { heroImage = $0 }
+                        .frame(height: 220)
+                        .frame(maxWidth: .infinity)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                    if let heroImage {
+                        ImageAttributionLabel(image: heroImage).padding(8)
                     }
                 }
-                .frame(height: 220)
-                .frame(maxWidth: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
             }
             Text(detail?.title ?? activity.title)
                 .font(.title3.bold())

@@ -104,12 +104,20 @@ struct HomeView: View {
     }
 
     private func fareRow(_ fare: BulkLowestFare) -> some View {
-        Button {
+        let city = displayCity(for: fare.toCity)
+        return Button {
             Task { await buildFare(fare) }
         } label: {
             HStack(spacing: 12) {
+                RichImageView(topic: "\(city) cityscape", fallbackTint: .blue)
+                    .frame(width: 64, height: 64)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.black.opacity(0.06), lineWidth: 1)
+                    }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(displayCity(for: fare.toCity))
+                    Text(city)
                         .font(.subheadline.bold())
                         .foregroundStyle(.primary)
                     Text("\(fare.departureDate) → \(fare.returnDate) · \(fare.period)d")
@@ -212,6 +220,10 @@ struct HomeView: View {
         "KIX": "Osaka", "ITM": "Osaka", "OSA": "Osaka",
         "FUK": "Fukuoka", "CTS": "Sapporo", "OKA": "Okinawa",
         "NGO": "Nagoya", "OIT": "Yufuin", "HIJ": "Hiroshima",
+        "YGJ": "Yonago", "TAK": "Takamatsu", "KMJ": "Kumamoto",
+        "NGS": "Nagasaki", "KOJ": "Kagoshima", "MYJ": "Matsuyama",
+        "KMI": "Miyazaki", "FSZ": "Shizuoka", "KOA": "Hawaii",
+        "AOJ": "Aomori", "AXT": "Akita", "GAJ": "Yamagata",
         "BKK": "Bangkok", "HKT": "Phuket", "CNX": "Chiang Mai",
         "SIN": "Singapore", "HAN": "Hanoi", "SGN": "Ho Chi Minh City",
         "DAD": "Da Nang", "DPS": "Bali", "MNL": "Manila",

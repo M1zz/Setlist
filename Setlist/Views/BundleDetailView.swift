@@ -88,24 +88,68 @@ struct BundleDetailView: View {
 
     // MARK: - Subviews
 
+    @State private var headerImage: OpenverseImage?
+
     private var headerCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(headline).font(.title2.bold())
-            Text(
-                "\(bundle.suggestedDepartureDate.formatted(date: .abbreviated, time: .omitted)) – \(bundle.suggestedReturnDate.formatted(date: .abbreviated, time: .omitted))"
+        ZStack(alignment: .bottomLeading) {
+            RichImageView(topic: heroTopic, fallbackTint: heroTint) { headerImage = $0 }
+                .frame(height: 200)
+                .frame(maxWidth: .infinity)
+
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.55)],
+                startPoint: .top,
+                endPoint: .bottom
             )
-            .foregroundStyle(.secondary)
-            if case .concert(let c) = bundle.source {
-                Label("Show: \(c.showDate.formatted(date: .abbreviated, time: .shortened))",
-                      systemImage: "music.mic")
-                    .font(.caption)
-                    .foregroundStyle(.purple)
+            .frame(height: 200)
+
+            VStack(alignment: .leading, spacing: 6) {
+                if case .concert(let c) = bundle.source {
+                    Label("Show: \(c.showDate.formatted(date: .abbreviated, time: .shortened))",
+                          systemImage: "music.mic")
+                        .font(.caption.bold())
+                        .foregroundStyle(.white.opacity(0.85))
+                }
+                Text(headline)
+                    .font(.title2.bold())
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                Text(
+                    "\(bundle.suggestedDepartureDate.formatted(date: .abbreviated, time: .omitted)) – \(bundle.suggestedReturnDate.formatted(date: .abbreviated, time: .omitted))"
+                )
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.85))
+            }
+            .padding(16)
+
+            if let headerImage {
+                ImageAttributionLabel(image: headerImage)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .topTrailing)
+                    .frame(height: 200, alignment: .topTrailing)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(Color.purple.opacity(0.1),
-                    in: RoundedRectangle(cornerRadius: 14))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+
+    private var heroTopic: String {
+        switch bundle.source {
+        case .concert(let c):
+            return "\(c.city) skyline night"
+        case .content(let c):
+            if let place = c.detectedPlaceName, !place.isEmpty { return place }
+            return "\(c.detectedCity) travel"
+        case .manual:
+            return "travel"
+        }
+    }
+
+    private var heroTint: Color {
+        switch bundle.source {
+        case .concert: return .purple
+        case .content: return .pink
+        case .manual:  return .blue
+        }
     }
 
     private var flightsSection: some View {

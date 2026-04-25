@@ -121,7 +121,8 @@ struct BookingsView: View {
                 subtitle: bundle.map(subtitle(for:)) ?? "",
                 detail: bundle.map(dateRangeString(for:)) ?? "",
                 ticketImageData: trip.ticketImageData,
-                accent: accent
+                accent: accent,
+                fallbackTopic: bundle.flatMap(topicHint(for:))
             )
         } bottom: {
             TicketBottomSection(
@@ -259,6 +260,14 @@ struct BookingsView: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .background(color.opacity(0.15), in: Capsule())
+    }
+
+    private func topicHint(for bundle: TravelBundle) -> String? {
+        switch bundle.source {
+        case .concert(let c): return "\(c.city) skyline"
+        case .content(let c): return c.detectedPlaceName ?? "\(c.detectedCity) cityscape"
+        case .manual:         return nil
+        }
     }
 
     private func subtitle(for bundle: TravelBundle) -> String {

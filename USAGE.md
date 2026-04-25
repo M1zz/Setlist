@@ -17,6 +17,7 @@
 9. [시나리오 H — Discover 트렌딩 (실시간 최저가)](#시나리오-h--discover-트렌딩-실시간-최저가)
 10. [시나리오 I — MCP 서버 연결](#시나리오-i--mcp-서버-연결)
 11. [시나리오 J — 사용자별 예약 추적 (BookingIntent)](#시나리오-j--사용자별-예약-추적-bookingintent)
+12. [시나리오 K — 이미지 (Openverse, 무료·상업 이용 가능)](#시나리오-k--이미지-openverse-무료상업-이용-가능)
 11. [파서가 지원하는 것 · 못하는 것](#파서가-지원하는-것--못하는-것)
 12. [테스트 데이터 일람](#테스트-데이터-일람)
 
@@ -339,6 +340,49 @@ curl -sS -H "Authorization: Bearer $MRT_KEY" \
 - **`data=[]` 인데 예약은 분명히 있음**: `dateSearchType`을 `PAYMENT` → `SETTLEMENT`으로 바꿔보기. 정산일 기준이면 다음날 6AM 전까지는 비어있음.
 - **`status: 403, "해당 API Key는 리소스 사용 권한이 없습니다"`**: 파트너 페이지에서 Open API 접근권한 확인. marketing_partner@myrealtrip.com 에 문의.
 - **앱 Revenue 탭이 항상 Mock 데이터**: `AppEnvironment.useMockMRT == true`인 상태. 빌드 스크립트가 Keychain 키를 못 읽은 것. `Secrets.plist` 빌드 결과를 확인하고 빌드 로그에서 `Secrets.plist generated (MRT key: N chars)` N이 0이면 Keychain에 키 저장 필요.
+
+---
+
+## 시나리오 K — 이미지 (Openverse, 무료·상업 이용 가능)
+
+> **상황**: 텍스트만 있던 화면을 도시·콘서트 hero 이미지로 채워서 앱이 살아있게 보이도록.
+> **소스**: `https://api.openverse.org/v1/images/?q=...` (Wikimedia Commons + Flickr CC + 다른 오픈 라이선스 소스 집계)
+
+### 라이선스 / 비용
+- **No API key 필요** — anonymous 호출 허용 (적당한 rate limit)
+- 검색 시 license 필터 `cc0,by,by-sa`만 통과시켜서 **모두 상업 이용 OK**
+- CC0(퍼블릭도메인): 별도 attribution 의무 없음
+- CC BY / CC BY-SA: 저작자 + 라이선스 표기 의무 → 앱이 hero 이미지 우상단에 작은 `📷 Photographer · CC BY 3.0` 캡션 표시
+
+### 사용 위치
+| 화면 | 어디 | 토픽 키워드 |
+|:---|:---|:---|
+| **HomeView** | 트렌딩 fare row 좌측 64×64 썸네일 | `"<city> cityscape"` |
+| **BundleDetailView** | 200pt 헤더 hero (도시명 + 날짜 텍스트가 위에 오버레이) | concert: `"<city> skyline night"` / content: `<placeName>` |
+| **TNADetailView** | MRT가 `imageUrl` 안 주는 경우 fallback hero | `<상품명>` |
+| **WishlistView / BookingsView** | 티켓 카드 썸네일 (사용자 업로드 사진 없을 때) | `"<city> skyline"` |
+
+### 캐싱
+- `OpenverseClient` (actor) 내부에 in-memory `[String: OpenverseImage]` 캐시 — 같은 토픽 두 번째 호출은 즉시 반환
+- 한 번 실패한 토픽은 `failed` set에 들어가 재시도 안 함
+- 이미지 자체(JPEG)는 `URLCache.shared`가 자동 디스크 캐싱
+
+### 안 뜨는 토픽
+일부 마이너한 키워드는 Openverse 결과가 0인데, 이때는 **gradient placeholder**가 뜸 (`fallbackTint` 색상의 sublime grad). 화면이 비어 보이지 않도록 보장.
+
+### 빠른 검증
+```bash
+curl -sS "https://api.openverse.org/v1/images/?q=tokyo+night&page_size=2&license=cc0,by,by-sa" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+for r in d.get('results',[])[:2]:
+    print(f'  - {r.get(\"title\")[:40]} | {r.get(\"license\")} | {r.get(\"thumbnail\")}')
+"
+```
+→ 매번 1~10개 결과 안정적으로 반환.
+
+### 다른 소스로 갈아끼우기
+`OpenverseClient`는 단일 메서드 `image(forTopic:)`만 노출하므로, 나중에 **Unsplash API / Pexels / 자체 CDN** 등으로 백엔드만 교체 가능. UI 쪽 (RichImageView) 영향 없음.
 
 ---
 

@@ -61,7 +61,8 @@ struct WishlistView: View {
                 subtitle: subtitle(for: bundle),
                 detail: dateRangeString(for: bundle),
                 ticketImageData: trip.ticketImageData,
-                accent: accent
+                accent: accent,
+                fallbackTopic: topicHint(for: bundle)
             )
         } bottom: {
             TicketBottomSection(
@@ -96,6 +97,15 @@ struct WishlistView: View {
         return "\(start) – \(end)"
     }
 
+    private func topicHint(for bundle: TravelBundle?) -> String? {
+        guard let bundle else { return nil }
+        switch bundle.source {
+        case .concert(let c): return "\(c.city) skyline"
+        case .content(let c): return c.detectedPlaceName ?? "\(c.detectedCity) cityscape"
+        case .manual:         return nil
+        }
+    }
+
     private func accentColor(for source: TripSource?) -> Color {
         switch source {
         case .concert: return .purple
@@ -113,6 +123,7 @@ struct TicketTopSection: View {
     let detail: String
     let ticketImageData: Data?
     let accent: Color
+    var fallbackTopic: String? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -146,6 +157,13 @@ struct TicketTopSection: View {
             Image(uiImage: ui)
                 .resizable()
                 .scaledToFill()
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color.black.opacity(0.08), lineWidth: 1)
+                )
+        } else if let topic = fallbackTopic, !topic.isEmpty {
+            RichImageView(topic: topic, fallbackTint: accent)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
