@@ -105,20 +105,21 @@ struct BundleDetailView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 if case .concert(let c) = bundle.source {
-                    Label("공연: \(c.showDate.formatted(date: .abbreviated, time: .shortened))",
+                    Label("공연 \(c.showDate.formatted(.dateTime.locale(Locale(identifier: "ko_KR")).month().day().hour().minute()))",
                           systemImage: "music.mic")
                         .font(.caption.bold())
                         .foregroundStyle(.white.opacity(0.85))
+                        .lineLimit(1)
                 }
                 Text(headline)
                     .font(.title2.bold())
                     .foregroundStyle(.white)
                     .lineLimit(2)
-                Text(
-                    "\(bundle.suggestedDepartureDate.formatted(date: .abbreviated, time: .omitted)) – \(bundle.suggestedReturnDate.formatted(date: .abbreviated, time: .omitted))"
-                )
-                .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.85))
+                    .minimumScaleFactor(0.9)
+                Text(headerDateRange)
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.85))
+                    .lineLimit(1)
             }
             .padding(16)
 
@@ -130,6 +131,24 @@ struct BundleDetailView: View {
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+
+    private func flightTimeString(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "M/d HH:mm"
+        f.locale = Locale(identifier: "ko_KR")
+        f.timeZone = TimeZone(identifier: "Asia/Seoul")
+        return f.string(from: date)
+    }
+
+    private var headerDateRange: String {
+        let f = DateFormatter()
+        f.dateFormat = "M/d(E)"
+        f.locale = Locale(identifier: "ko_KR")
+        f.timeZone = TimeZone(identifier: "Asia/Seoul")
+        let d = f.string(from: bundle.suggestedDepartureDate)
+        let r = f.string(from: bundle.suggestedReturnDate)
+        return "\(d) – \(r)"
     }
 
     private var heroTopic: String {
@@ -179,11 +198,11 @@ struct BundleDetailView: View {
                             }
                             Image(systemName: "chevron.right").foregroundStyle(.tertiary).font(.caption)
                         }
-                        Text(
-                            "\(f.fromAirport) → \(f.toAirport) · \(f.departureTime.formatted(date: .abbreviated, time: .shortened))"
-                        )
+                        Text("\(f.fromAirport) → \(f.toAirport) · \(flightTimeString(f.departureTime))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                     }
                     .contentShape(Rectangle())
                 }
@@ -211,10 +230,14 @@ struct BundleDetailView: View {
                     ) }
                 } label: {
                     VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(h.name).bold().lineLimit(2)
-                            Spacer()
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(h.name)
+                                .bold()
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.9)
+                            Spacer(minLength: 8)
                             Text("₩\(h.pricePerNightKRW.formatted())/박")
+                                .lineLimit(1)
                             Image(systemName: "chevron.right").foregroundStyle(.tertiary).font(.caption)
                         }
                         Text(hotelCaption(h))

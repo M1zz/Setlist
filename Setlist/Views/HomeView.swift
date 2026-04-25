@@ -16,14 +16,14 @@ struct HomeView: View {
                 VStack(spacing: 16) {
                     heroCard(
                         title: "콘서트 티켓으로 시작",
-                        subtitle: "티켓 사진을 올리면 공연장 근처 항공·호텔을 가격 오르기 전에 찾아드려요.",
+                        subtitle: "티켓 한 장으로 공연장 근처\n항공·숙소를 한꺼번에",
                         systemImage: "ticket.fill",
                         tint: .purple
                     ) { showConcertImport = true }
 
                     heroCard(
-                        title: "릴스/영상에서 시작",
-                        subtitle: "인스타·틱톡·유튜브 링크를 붙여넣으면 바로 예약 가능한 여행으로 만들어드려요.",
+                        title: "릴스·영상에서 시작",
+                        subtitle: "인스타·틱톡·유튜브 링크를\n바로 예약 가능한 여행으로",
                         systemImage: "play.rectangle.fill",
                         tint: .pink
                     ) { showContentImport = true }
@@ -73,7 +73,11 @@ struct HomeView: View {
                     .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
                 VStack(alignment: .leading, spacing: 6) {
                     Text(title).font(.headline)
-                    Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineSpacing(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
             }
@@ -120,11 +124,13 @@ struct HomeView: View {
                     Text(city)
                         .font(.subheadline.bold())
                         .foregroundStyle(.primary)
-                    Text("\(fare.departureDate) → \(fare.returnDate) · \(fare.period)d")
+                        .lineLimit(1)
+                    Text(fareDateLine(fare))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-                Spacer()
+                Spacer(minLength: 4)
                 if let avg = fare.averagePriceKRW, avg > fare.totalPriceKRW {
                     let pct = Int((1.0 - Double(fare.totalPriceKRW) / Double(avg)) * 100)
                     if pct >= 5 {
@@ -203,6 +209,33 @@ struct HomeView: View {
         } catch {
             buildError = error.localizedDescription
         }
+    }
+
+    private static let fareInputFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "Asia/Seoul")
+        return f
+    }()
+
+    private static let fareDisplayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "M/d"
+        f.locale = Locale(identifier: "ko_KR")
+        f.timeZone = TimeZone(identifier: "Asia/Seoul")
+        return f
+    }()
+
+    private func fareDateLine(_ fare: BulkLowestFare) -> String {
+        let nights = max(1, fare.period - 1)
+        if let dep = Self.fareInputFormatter.date(from: fare.departureDate),
+           let ret = Self.fareInputFormatter.date(from: fare.returnDate) {
+            let depStr = Self.fareDisplayFormatter.string(from: dep)
+            let retStr = Self.fareDisplayFormatter.string(from: ret)
+            return "\(depStr) → \(retStr) · \(nights)박\(fare.period)일"
+        }
+        return "\(fare.departureDate) → \(fare.returnDate)"
     }
 
     private func displayCity(for code: String) -> String {

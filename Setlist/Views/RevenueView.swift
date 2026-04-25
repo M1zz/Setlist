@@ -143,11 +143,12 @@ struct RevenueView: View {
 
     private func lineRow(_ line: RevenueLine) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(line.productTitle)
                         .font(.callout.bold())
                         .lineLimit(2)
+                        .minimumScaleFactor(0.9)
                     HStack(spacing: 6) {
                         if !line.productCategory.isEmpty {
                             pill(line.productCategory, color: .blue)
@@ -157,14 +158,17 @@ struct RevenueView: View {
                         }
                     }
                 }
-                Spacer()
+                Spacer(minLength: 4)
                 VStack(alignment: .trailing, spacing: 2) {
                     Text("+₩\(line.commissionKRW.formatted())")
                         .font(.callout.bold())
                         .foregroundStyle(line.commissionKRW >= 0 ? .green : .red)
+                        .lineLimit(1)
                     Text(String(format: "₩\(line.salePriceKRW.formatted())의 %.1f%%", line.commissionRate * 100))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                 }
             }
             if line.city != nil || line.reservedAt != nil {

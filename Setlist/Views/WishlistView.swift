@@ -133,18 +133,21 @@ struct TicketTopSection: View {
                 Text(title)
                     .font(.title3.bold())
                     .lineLimit(2)
+                    .minimumScaleFactor(0.85)
                     .foregroundStyle(.primary)
                 if !subtitle.isEmpty {
                     Text(subtitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .truncationMode(.tail)
                 }
                 if !detail.isEmpty {
                     Label(detail, systemImage: "calendar")
                         .font(.caption2.bold())
                         .foregroundStyle(accent)
                         .labelStyle(.titleAndIcon)
+                        .lineLimit(1)
                 }
             }
             Spacer(minLength: 0)
@@ -195,27 +198,29 @@ struct TicketBottomSection: View {
     let seedForBarcode: String
 
     var body: some View {
-        HStack(alignment: .bottom) {
+        HStack(alignment: .bottom, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(leading)
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)
-                    .kerning(1.2)
+                    .lineLimit(1)
                 Text(leadingValue)
                     .font(.callout.bold())
                     .foregroundStyle(.primary)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
-            Spacer()
+            Spacer(minLength: 0)
             VStack(alignment: .trailing, spacing: 2) {
                 Text(trailing)
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)
-                    .kerning(1.2)
+                    .lineLimit(1)
                 Text(trailingValue)
                     .font(.callout.bold())
                     .foregroundStyle(.primary)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
         }
     }
