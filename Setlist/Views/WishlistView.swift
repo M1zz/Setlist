@@ -10,9 +10,9 @@ struct WishlistView: View {
             Group {
                 if trips.isEmpty {
                     ContentUnavailableView(
-                        "No saved trips yet",
+                        "찜한 여행이 없어요",
                         systemImage: "ticket",
-                        description: Text("Trips you save will show up here as tickets.")
+                        description: Text("찜한 여행이 티켓 모양으로 여기에 모여요.")
                     )
                 } else {
                     ScrollView {
@@ -29,7 +29,7 @@ struct WishlistView: View {
                                     Button(role: .destructive) {
                                         delete(trip)
                                     } label: {
-                                        Label("Remove", systemImage: "trash")
+                                        Label("삭제", systemImage: "trash")
                                     }
                                 }
                             }
@@ -39,7 +39,7 @@ struct WishlistView: View {
                     .background(Color(red: 0.95, green: 0.94, blue: 0.91))
                 }
             }
-            .navigationTitle("Wishlist")
+            .navigationTitle("찜")
         }
     }
 
@@ -48,7 +48,7 @@ struct WishlistView: View {
         if let bundle = trip.bundle {
             BundleDetailView(bundle: bundle, ticketImageData: trip.ticketImageData)
         } else {
-            Text("Could not load this trip")
+            Text("이 여행을 불러올 수 없어요")
         }
     }
 
@@ -66,9 +66,9 @@ struct WishlistView: View {
             )
         } bottom: {
             TicketBottomSection(
-                leading: "SAVED",
+                leading: "찜한 날",
                 leadingValue: trip.createdAt.formatted(date: .abbreviated, time: .omitted),
-                trailing: "EST. TOTAL",
+                trailing: "예상 총액",
                 trailingValue: bundle.map { "₩\($0.estimatedTotalKRW.formatted())" } ?? "—",
                 seedForBarcode: trip.id.uuidString
             )

@@ -44,7 +44,7 @@ struct RevenueView: View {
                 }
                 .padding()
             }
-            .navigationTitle("Revenue")
+            .navigationTitle("수익")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -68,7 +68,7 @@ struct RevenueView: View {
 
     private var hero: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Total commission")
+            Text("총 커미션")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             Text("₩\(totalCommission.formatted())")
@@ -79,9 +79,9 @@ struct RevenueView: View {
                     endPoint: .bottomTrailing
                 ))
             HStack(spacing: 16) {
-                metric("Sales", "₩\(totalSale.formatted())")
-                metric("Avg rate", totalSale > 0 ? String(format: "%.1f%%", avgRate * 100) : "—")
-                metric("Bookings", "\(allLines.count)")
+                metric("매출", "₩\(totalSale.formatted())")
+                metric("평균 요율", totalSale > 0 ? String(format: "%.1f%%", avgRate * 100) : "—")
+                metric("건수", "\(allLines.count)")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -98,23 +98,23 @@ struct RevenueView: View {
 
     private var filterBar: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Picker("Range", selection: $rangeDays) {
-                Text("7d").tag(7)
-                Text("30d").tag(30)
-                Text("90d").tag(90)
+            Picker("기간", selection: $rangeDays) {
+                Text("7일").tag(7)
+                Text("30일").tag(30)
+                Text("90일").tag(90)
             }
             .pickerStyle(.segmented)
 
-            Picker("Date type", selection: $dateType) {
-                Text("Booking date").tag(RevenueDateType.payment)
-                Text("Settlement").tag(RevenueDateType.settlement)
+            Picker("기준", selection: $dateType) {
+                Text("예약일 기준").tag(RevenueDateType.payment)
+                Text("정산일 기준").tag(RevenueDateType.settlement)
             }
             .pickerStyle(.segmented)
         }
     }
 
     private var mockBanner: some View {
-        Label("No API key — showing sample data. Add your MRT partner key via Keychain to fetch real revenue.", systemImage: "info.circle")
+        Label("API 키가 없어 샘플 데이터를 보여드려요. Keychain에 마이리얼트립 파트너 키를 저장하면 실데이터가 들어와요.", systemImage: "info.circle")
             .font(.caption)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -124,16 +124,16 @@ struct RevenueView: View {
 
     private var emptyState: some View {
         ContentUnavailableView {
-            Label("No revenue in this period", systemImage: "chart.line.uptrend.xyaxis")
+            Label("이 기간 수익이 없어요", systemImage: "chart.line.uptrend.xyaxis")
         } description: {
-            Text("Commissions from bookings made via your mylinks will show up here once MRT settles them (daily at 6 AM KST).")
+            Text("내 마이링크로 발생한 예약은 매일 오전 6시(KST) 정산 후 여기에 표시돼요.")
         }
         .padding(.top, 40)
     }
 
     private var linesList: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Line items")
+            Text("건별 내역")
                 .font(.headline)
             ForEach(allLines) { line in
                 lineRow(line)
@@ -162,7 +162,7 @@ struct RevenueView: View {
                     Text("+₩\(line.commissionKRW.formatted())")
                         .font(.callout.bold())
                         .foregroundStyle(line.commissionKRW >= 0 ? .green : .red)
-                    Text(String(format: "%.1f%% of ₩\(line.salePriceKRW.formatted())", line.commissionRate * 100))
+                    Text(String(format: "₩\(line.salePriceKRW.formatted())의 %.1f%%", line.commissionRate * 100))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

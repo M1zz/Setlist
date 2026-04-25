@@ -15,13 +15,13 @@ struct RootView: View {
     var body: some View {
         TabView {
             HomeView()
-                .tabItem { Label("Discover", systemImage: "sparkles") }
+                .tabItem { Label("둘러보기", systemImage: "sparkles") }
             WishlistView()
-                .tabItem { Label("Wishlist", systemImage: "heart") }
+                .tabItem { Label("찜", systemImage: "heart") }
             BookingsView()
-                .tabItem { Label("Trips", systemImage: "airplane") }
+                .tabItem { Label("내 여행", systemImage: "airplane") }
             RevenueView()
-                .tabItem { Label("Revenue", systemImage: "chart.line.uptrend.xyaxis") }
+                .tabItem { Label("수익", systemImage: "chart.line.uptrend.xyaxis") }
         }
     }
 }

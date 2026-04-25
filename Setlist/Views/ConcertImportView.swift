@@ -20,9 +20,9 @@ struct ConcertImportView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Upload your ticket") {
+                Section("티켓 사진 올리기") {
                     PhotosPicker(
-                        "Choose ticket image",
+                        "티켓 사진 선택",
                         selection: $pickedItem,
                         matching: .images
                     )
@@ -35,22 +35,22 @@ struct ConcertImportView: View {
                     }
                 }
 
-                Section("Or paste ticket details") {
+                Section("또는 티켓 정보 붙여넣기") {
                     TextEditor(text: $manualText)
                         .frame(minHeight: 100)
-                    Text("Example: \"BTS ARIRANG, Tokyo Dome, 2026-06-15 19:00\"")
+                    Text("예: \"BTS ARIRANG, 도쿄돔, 2026-06-15 19:00\"")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
                 if let preview = previewConcert {
-                    Section("We detected") {
-                        detectedRow("music.mic", "Artist", preview.artist)
-                        detectedRow("mappin.and.ellipse", "Venue", preview.venueName)
-                        detectedRow("location", "City", "\(preview.city), \(preview.country)")
+                    Section("이렇게 인식했어요") {
+                        detectedRow("music.mic", "아티스트", preview.artist)
+                        detectedRow("mappin.and.ellipse", "공연장", preview.venueName)
+                        detectedRow("location", "도시", "\(preview.city), \(preview.country)")
                         detectedRow(
                             "calendar",
-                            "Show date",
+                            "공연일",
                             preview.showDate.formatted(date: .abbreviated, time: .shortened)
                         )
                     }
@@ -65,7 +65,7 @@ struct ConcertImportView: View {
                             if isParsing {
                                 ProgressView()
                             } else {
-                                Text("Build trip")
+                                Text("여행 만들기")
                                     .fontWeight(.semibold)
                             }
                             Spacer()
@@ -82,10 +82,10 @@ struct ConcertImportView: View {
                     }
                 }
             }
-            .navigationTitle("Concert trip")
+            .navigationTitle("콘서트 여행")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
+                    Button("닫기") { dismiss() }
                 }
             }
             .onChange(of: pickedItem) { _, newItem in

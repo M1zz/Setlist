@@ -18,17 +18,17 @@ struct BookingsView: View {
             Group {
                 if bookings.isEmpty && remoteReservations.isEmpty && remoteFlightReservations.isEmpty && intents.isEmpty && !isRefreshing {
                     ContentUnavailableView(
-                        "No booked trips",
+                        "예약 내역이 없어요",
                         systemImage: "ticket",
                         description: Text(AppEnvironment.useMockMRT
-                            ? "Confirmed bookings will appear here once you connect your MyRealTrip partner key."
-                            : "Pull to refresh — reservations from MyRealTrip show up as tickets.")
+                            ? "마이리얼트립 파트너 키를 연결하면 확정된 예약이 여기에 표시돼요."
+                            : "당겨서 새로고침하면 마이리얼트립 예약이 티켓으로 보여요.")
                     )
                 } else {
                     content
                 }
             }
-            .navigationTitle("Trips")
+            .navigationTitle("내 여행")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -61,28 +61,28 @@ struct BookingsView: View {
         ScrollView {
             LazyVStack(spacing: 20) {
                 if !intents.isEmpty {
-                    sectionHeader("My recent bookings")
+                    sectionHeader("내가 시작한 예약")
                     ForEach(intents) { intent in
                         intentTicketRow(intent)
                             .padding(.horizontal, 16)
                     }
                 }
                 if !bookings.isEmpty {
-                    sectionHeader("Opened from this device")
+                    sectionHeader("이 기기에서 연 예약")
                     ForEach(bookings) { trip in
                         localTicketRow(trip)
                             .padding(.horizontal, 16)
                     }
                 }
                 if !remoteReservations.isEmpty {
-                    sectionHeader("From MyRealTrip · Tours & stays")
+                    sectionHeader("마이리얼트립 · 투어/숙소")
                     ForEach(remoteReservations) { reservation in
                         remoteTicketRow(reservation)
                             .padding(.horizontal, 16)
                     }
                 }
                 if !remoteFlightReservations.isEmpty {
-                    sectionHeader("From MyRealTrip · Flights")
+                    sectionHeader("마이리얼트립 · 항공")
                     ForEach(remoteFlightReservations) { reservation in
                         flightTicketRow(reservation)
                             .padding(.horizontal, 16)
@@ -126,9 +126,9 @@ struct BookingsView: View {
             )
         } bottom: {
             TicketBottomSection(
-                leading: "REF",
+                leading: "예약번호",
                 leadingValue: trip.bookingReference,
-                trailing: "BOOKED",
+                trailing: "예약일시",
                 trailingValue: trip.bookedAt.formatted(date: .abbreviated, time: .shortened),
                 seedForBarcode: trip.id.uuidString
             )
@@ -160,9 +160,9 @@ struct BookingsView: View {
             }
         } bottom: {
             TicketBottomSection(
-                leading: "RESERVED",
+                leading: "예약일",
                 leadingValue: r.reservedAt?.formatted(date: .abbreviated, time: .omitted) ?? "—",
-                trailing: "PRICE",
+                trailing: "결제금액",
                 trailingValue: r.salePriceKRW > 0 ? "₩\(r.salePriceKRW.formatted())" : "—",
                 seedForBarcode: r.id
             )
@@ -173,10 +173,10 @@ struct BookingsView: View {
     private func intentTicketRow(_ intent: BookingIntent) -> some View {
         let (label, accent): (String, Color) = {
             switch intent.status {
-            case "confirmed": return ("CONFIRMED · \(intent.statusKor ?? "예약확정")", .green)
-            case "expired":   return ("PENDING · attribution lapsed", .orange)
+            case "confirmed": return ("확정 · \(intent.statusKor ?? "예약확정")", .green)
+            case "expired":   return ("만료됨 (24시간 경과)", .orange)
             default:
-                return (intent.isAttributionWindowOpen ? "PENDING" : "PENDING · cookie expired", .blue)
+                return (intent.isAttributionWindowOpen ? "진행중" : "쿠키 만료", .blue)
             }
         }()
         return TicketCard(accent: accent) {
@@ -184,7 +184,7 @@ struct BookingsView: View {
                 HStack {
                     statusPill(label, color: accent)
                     Spacer()
-                    Text(intent.productCategory)
+                    Text(categoryLabel(intent.productCategory))
                         .font(.caption2.bold())
                         .foregroundStyle(.secondary)
                 }
@@ -192,18 +192,18 @@ struct BookingsView: View {
                     .font(.title3.bold())
                     .lineLimit(2)
                     .padding(.top, 2)
-                Text("Tagged \(intent.id.uuidString.prefix(8))…")
+                Text("태그 \(intent.id.uuidString.prefix(8))…")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
         } bottom: {
             TicketBottomSection(
-                leading: "STARTED",
+                leading: "시작",
                 leadingValue: intent.createdAt.formatted(date: .abbreviated, time: .shortened),
-                trailing: intent.status == "confirmed" ? "PRICE" : "STATUS",
+                trailing: intent.status == "confirmed" ? "결제금액" : "상태",
                 trailingValue: intent.status == "confirmed"
                     ? (intent.actualSalePriceKRW > 0 ? "₩\(intent.actualSalePriceKRW.formatted())" : "—")
-                    : intent.status.uppercased(),
+                    : statusValue(intent.status),
                 seedForBarcode: intent.id.uuidString
             )
         }
@@ -216,6 +216,23 @@ struct BookingsView: View {
         }
     }
 
+    private func categoryLabel(_ raw: String) -> String {
+        switch raw {
+        case "TNA": return "투어/티켓"
+        case "HOTEL": return "숙소"
+        case "FLIGHT": return "항공"
+        default: return raw
+        }
+    }
+
+    private func statusValue(_ raw: String) -> String {
+        switch raw {
+        case "pending": return "진행중"
+        case "expired": return "만료"
+        default: return raw
+        }
+    }
+
     private func flightTicketRow(_ r: RemoteFlightReservation) -> some View {
         let accent: Color = r.statusKor.contains("취소") ? .gray : .indigo
         return TicketCard(accent: accent) {
@@ -223,7 +240,7 @@ struct BookingsView: View {
                 HStack {
                     statusPill(r.statusKor, color: accent)
                     Spacer()
-                    Text(r.tripType.replacingOccurrences(of: "_", with: " "))
+                    Text(tripTypeLabel(r.tripType))
                         .font(.caption2.bold())
                         .foregroundStyle(.secondary)
                 }
@@ -235,7 +252,7 @@ struct BookingsView: View {
                         Text(r.airlineName.isEmpty ? r.airlineCode : r.airlineName)
                             .font(.title3.bold())
                             .lineLimit(1)
-                        Text("\(r.operationScope) · \(r.airlineCode)")
+                        Text("\(scopeLabel(r.operationScope)) · \(r.airlineCode)")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -245,12 +262,29 @@ struct BookingsView: View {
             TicketBottomSection(
                 leading: "PNR",
                 leadingValue: r.pnr ?? r.reservationNo,
-                trailing: "FARE",
+                trailing: "운임",
                 trailingValue: r.issueNetKRW > 0 ? "₩\(r.issueNetKRW.formatted())" : "—",
                 seedForBarcode: r.id
             )
         }
         .frame(height: 190)
+    }
+
+    private func tripTypeLabel(_ raw: String) -> String {
+        switch raw {
+        case "ROUND_TRIP": return "왕복"
+        case "ONE_WAY": return "편도"
+        case "MULTI": return "다구간"
+        default: return raw
+        }
+    }
+
+    private func scopeLabel(_ raw: String) -> String {
+        switch raw {
+        case "INTERNATIONAL": return "국제선"
+        case "DOMESTIC": return "국내선"
+        default: return raw
+        }
     }
 
     private func statusPill(_ text: String, color: Color) -> some View {

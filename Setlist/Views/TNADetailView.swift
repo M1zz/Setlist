@@ -43,7 +43,7 @@ struct TNADetailView: View {
         .safeAreaInset(edge: .bottom) {
             stickyBookingBar
         }
-        .navigationTitle("Activity")
+        .navigationTitle("액티비티")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await loadDetail()
@@ -94,15 +94,15 @@ struct TNADetailView: View {
                         .font(.subheadline.bold())
                 }
                 if let count = detail?.reviewCount, count > 0 {
-                    Text("· \(count) reviews").foregroundStyle(.secondary).font(.caption)
+                    Text("· 리뷰 \(count)건").foregroundStyle(.secondary).font(.caption)
                 }
             }
         }
     }
 
     private func descriptionCard(_ d: TNADetail) -> some View {
-        sectionCard(title: "About") {
-            Text(d.description ?? "(No description)")
+        sectionCard(title: "소개") {
+            Text(d.description ?? "(설명 없음)")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -110,7 +110,7 @@ struct TNADetailView: View {
     }
 
     private func includedExcludedCard(_ d: TNADetail) -> some View {
-        sectionCard(title: "What's included") {
+        sectionCard(title: "포함 사항") {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(d.included, id: \.self) { item in
                     Label(item, systemImage: "checkmark.circle.fill")
@@ -132,7 +132,7 @@ struct TNADetailView: View {
     }
 
     private func itineraryCard(_ items: [TNAItineraryEntry]) -> some View {
-        sectionCard(title: "Itinerary") {
+        sectionCard(title: "일정") {
             VStack(alignment: .leading, spacing: 12) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, entry in
                     VStack(alignment: .leading, spacing: 2) {
@@ -149,7 +149,7 @@ struct TNADetailView: View {
     }
 
     private var dateCard: some View {
-        sectionCard(title: "Pick a date") {
+        sectionCard(title: "날짜 선택") {
             VStack(alignment: .leading, spacing: 8) {
                 DatePicker(
                     "",
@@ -159,17 +159,18 @@ struct TNADetailView: View {
                 )
                 .labelsHidden()
                 .datePickerStyle(.compact)
+                .environment(\.locale, Locale(identifier: "ko_KR"))
 
                 if let cal = calendar {
                     HStack(spacing: 8) {
                         if let label = cal.basePriceLabel {
-                            pill("from \(label)", color: .blue)
+                            pill("최저가 \(label)", color: .blue)
                         }
                         if cal.instantConfirm {
-                            pill("Instant confirm", color: .green)
+                            pill("즉시 확정", color: .green)
                         }
                         if cal.blockDates.contains(dayString(selectedDate)) {
-                            pill("Sold out", color: .gray)
+                            pill("매진", color: .gray)
                         }
                     }
                 }
@@ -178,13 +179,13 @@ struct TNADetailView: View {
     }
 
     private var optionsCard: some View {
-        sectionCard(title: "Available options") {
+        sectionCard(title: "예약 가능 옵션") {
             VStack(spacing: 10) {
                 if isLoadingOptions {
                     ProgressView().frame(maxWidth: .infinity).padding(.vertical)
                 }
                 if let options, options.options.isEmpty, !isLoadingOptions {
-                    Text("No options available for this date.")
+                    Text("이 날짜에 예약 가능한 옵션이 없어요.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -194,7 +195,7 @@ struct TNADetailView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(option.name).font(.subheadline.bold())
                                 if let avail = option.availablePurchaseQuantity {
-                                    Text("\(avail) left").font(.caption2).foregroundStyle(.secondary)
+                                    Text("\(avail)개 남음").font(.caption2).foregroundStyle(.secondary)
                                 }
                             }
                             Spacer()
@@ -212,7 +213,7 @@ struct TNADetailView: View {
     private var stickyBookingBar: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Starting at").font(.caption).foregroundStyle(.secondary)
+                Text("최저가").font(.caption).foregroundStyle(.secondary)
                 Text("₩\(lowestOptionPriceKRW.formatted())")
                     .font(.title3.bold())
             }
@@ -222,7 +223,7 @@ struct TNADetailView: View {
             } label: {
                 HStack {
                     if isOpeningBooking { ProgressView().tint(.white) }
-                    Text(isOpeningBooking ? "Opening…" : "Book on MyRealTrip")
+                    Text(isOpeningBooking ? "여는 중..." : "마이리얼트립에서 예약")
                         .fontWeight(.semibold)
                 }
                 .padding(.horizontal, 12)

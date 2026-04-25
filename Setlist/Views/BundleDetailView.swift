@@ -28,20 +28,20 @@ struct BundleDetailView: View {
         .safeAreaInset(edge: .bottom) {
             stickyBookingBar
         }
-        .navigationTitle("Your trip")
+        .navigationTitle("여행 일정")
         .navigationBarTitleDisplayMode(.inline)
-        .alert("Saved to wishlist", isPresented: $savedConfirmation) {
-            Button("OK", role: .cancel) { }
+        .alert("찜에 저장됐어요", isPresented: $savedConfirmation) {
+            Button("확인", role: .cancel) { }
         }
         .alert(
-            "Couldn't open booking",
+            "예약 페이지를 열 수 없어요",
             isPresented: Binding(
                 get: { bookingError != nil },
                 set: { if !$0 { bookingError = nil } }
             ),
             presenting: bookingError
         ) { _ in
-            Button("OK", role: .cancel) { bookingError = nil }
+            Button("확인", role: .cancel) { bookingError = nil }
         } message: { msg in
             Text(msg)
         }
@@ -51,7 +51,7 @@ struct BundleDetailView: View {
         VStack(spacing: 10) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Estimated total").font(.caption).foregroundStyle(.secondary)
+                    Text("예상 총액").font(.caption).foregroundStyle(.secondary)
                     Text("₩\(bundle.estimatedTotalKRW.formatted())")
                         .font(.title3.bold())
                 }
@@ -71,7 +71,7 @@ struct BundleDetailView: View {
                 } label: {
                     HStack {
                         if isOpeningBooking { ProgressView().tint(.white) }
-                        Text(isOpeningBooking ? "Opening…" : "Book all")
+                        Text(isOpeningBooking ? "여는 중..." : "예약하기")
                             .fontWeight(.semibold)
                     }
                     .padding(.horizontal, 8)
@@ -105,7 +105,7 @@ struct BundleDetailView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 if case .concert(let c) = bundle.source {
-                    Label("Show: \(c.showDate.formatted(date: .abbreviated, time: .shortened))",
+                    Label("공연: \(c.showDate.formatted(date: .abbreviated, time: .shortened))",
                           systemImage: "music.mic")
                         .font(.caption.bold())
                         .foregroundStyle(.white.opacity(0.85))
@@ -153,9 +153,9 @@ struct BundleDetailView: View {
     }
 
     private var flightsSection: some View {
-        sectionCard(title: "Flights") {
+        sectionCard(title: "항공편") {
             if bundle.flights.isEmpty {
-                Text("No flight prices available for these dates.")
+                Text("이 날짜의 항공 운임을 가져오지 못했어요.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -175,7 +175,7 @@ struct BundleDetailView: View {
                             if f.priceKRW > 0 {
                                 Text("₩\(f.priceKRW.formatted())")
                             } else {
-                                Text("See fare").foregroundStyle(.secondary)
+                                Text("운임 보기").foregroundStyle(.secondary)
                             }
                             Image(systemName: "chevron.right").foregroundStyle(.tertiary).font(.caption)
                         }
@@ -195,9 +195,9 @@ struct BundleDetailView: View {
     }
 
     private var hotelsSection: some View {
-        sectionCard(title: "Hotels near your anchor") {
+        sectionCard(title: "근처 숙소") {
             if bundle.hotels.isEmpty {
-                Text("No hotels returned for these dates.")
+                Text("이 날짜에 가져올 수 있는 숙소가 없어요.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -214,14 +214,14 @@ struct BundleDetailView: View {
                         HStack {
                             Text(h.name).bold().lineLimit(2)
                             Spacer()
-                            Text("₩\(h.pricePerNightKRW.formatted())/night")
+                            Text("₩\(h.pricePerNightKRW.formatted())/박")
                             Image(systemName: "chevron.right").foregroundStyle(.tertiary).font(.caption)
                         }
                         Text(hotelCaption(h))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         if h.freeCancellation {
-                            Label("Free cancellation", systemImage: "checkmark.seal")
+                            Label("무료 취소", systemImage: "checkmark.seal")
                                 .font(.caption)
                                 .foregroundStyle(.green)
                         }
@@ -238,21 +238,21 @@ struct BundleDetailView: View {
     private func hotelCaption(_ h: HotelOption) -> String {
         var parts: [String] = []
         if h.distanceMetersFromAnchor > 0 {
-            parts.append("\(h.distanceMetersFromAnchor)m away")
+            parts.append("\(h.distanceMetersFromAnchor)m 거리")
         }
         if h.starRating > 0 {
             parts.append(String(format: "%.1f★", h.starRating))
         }
         if h.userRating > 0 {
-            parts.append(String(format: "guests %.1f", h.userRating))
+            parts.append(String(format: "투숙객 %.1f", h.userRating))
         }
         return parts.joined(separator: " · ")
     }
 
     private var activitiesSection: some View {
-        sectionCard(title: "Add-on activities") {
+        sectionCard(title: "추천 액티비티") {
             if bundle.activities.isEmpty {
-                Text("No activities found for this city.")
+                Text("이 도시의 액티비티가 없어요.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -298,7 +298,7 @@ struct BundleDetailView: View {
 
     private func activityCaption(_ a: ActivityOption) -> String {
         var parts: [String] = []
-        if a.durationHours > 0 { parts.append(String(format: "%.1f hrs", a.durationHours)) }
+        if a.durationHours > 0 { parts.append(String(format: "%.1f시간", a.durationHours)) }
         if a.rating > 0 { parts.append(String(format: "★ %.1f", a.rating)) }
         return parts.joined(separator: " · ")
     }
@@ -323,7 +323,7 @@ struct BundleDetailView: View {
         switch bundle.source {
         case .concert(let c): return "\(c.artist) · \(c.city)"
         case .content(let c): return c.detectedPlaceName ?? c.detectedCity
-        case .manual: return "Trip"
+        case .manual: return "여행"
         }
     }
 

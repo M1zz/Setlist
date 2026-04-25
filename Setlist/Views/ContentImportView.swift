@@ -10,7 +10,7 @@ struct ContentImportView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Paste link") {
+                Section("링크 붙여넣기") {
                     TextField(
                         "https://instagram.com/reel/...",
                         text: $urlString
@@ -29,7 +29,7 @@ struct ContentImportView: View {
                             if isParsing {
                                 ProgressView()
                             } else {
-                                Text("Turn into trip")
+                                Text("여행으로 만들기")
                                     .fontWeight(.semibold)
                             }
                             Spacer()
@@ -46,17 +46,17 @@ struct ContentImportView: View {
                     }
                 }
 
-                Section("How it works") {
-                    Label("We read the post or video.", systemImage: "eye")
-                    Label("Detect the location and route.", systemImage: "mappin.and.ellipse")
-                    Label("Build a bookable trip.", systemImage: "bag")
+                Section("이렇게 동작해요") {
+                    Label("게시물/영상을 읽어요", systemImage: "eye")
+                    Label("장소와 경로를 찾아내요", systemImage: "mappin.and.ellipse")
+                    Label("바로 예약 가능한 여행을 구성해요", systemImage: "bag")
                 }
                 .font(.subheadline)
             }
-            .navigationTitle("Reel to trip")
+            .navigationTitle("릴스/영상에서 여행 만들기")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
+                    Button("닫기") { dismiss() }
                 }
             }
             .navigationDestination(item: $bundle) { b in

@@ -15,15 +15,15 @@ struct HomeView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     heroCard(
-                        title: "From concert ticket",
-                        subtitle: "Upload your ticket. We find flights and hotels by the venue before prices spike.",
+                        title: "콘서트 티켓으로 시작",
+                        subtitle: "티켓 사진을 올리면 공연장 근처 항공·호텔을 가격 오르기 전에 찾아드려요.",
                         systemImage: "ticket.fill",
                         tint: .purple
                     ) { showConcertImport = true }
 
                     heroCard(
-                        title: "From a reel or video",
-                        subtitle: "Paste an Instagram, TikTok, or YouTube link. We turn it into a bookable trip.",
+                        title: "릴스/영상에서 시작",
+                        subtitle: "인스타·틱톡·유튜브 링크를 붙여넣으면 바로 예약 가능한 여행으로 만들어드려요.",
                         systemImage: "play.rectangle.fill",
                         tint: .pink
                     ) { showContentImport = true }
@@ -41,14 +41,14 @@ struct HomeView: View {
                 BundleDetailView(bundle: bundle)
             }
             .alert(
-                "Couldn't build trip",
+                "여행을 만들지 못했어요",
                 isPresented: Binding(
                     get: { buildError != nil },
                     set: { if !$0 { buildError = nil } }
                 ),
                 presenting: buildError
             ) { _ in
-                Button("OK", role: .cancel) { buildError = nil }
+                Button("확인", role: .cancel) { buildError = nil }
             } message: { msg in
                 Text(msg)
             }
@@ -87,13 +87,13 @@ struct HomeView: View {
     private var cheapTripsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Cheapest from ICN")
+                Text("인천 출발 최저가")
                     .font(.title3.bold())
                 Spacer()
                 if isLoadingFares { ProgressView().controlSize(.small) }
             }
             if fares.isEmpty && !isLoadingFares {
-                Text("No fares available right now.")
+                Text("지금 가져올 수 있는 항공편이 없어요.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -185,7 +185,7 @@ struct HomeView: View {
         f.timeZone = TimeZone(identifier: "Asia/Seoul")
         guard let depart = f.date(from: fare.departureDate),
               let ret = f.date(from: fare.returnDate) else {
-            buildError = "Invalid date in fare"
+            buildError = "날짜 정보가 올바르지 않아요"
             return
         }
 
@@ -207,8 +207,29 @@ struct HomeView: View {
 
     private func displayCity(for code: String) -> String {
         let mapped = airportToCity[code] ?? code
-        return mapped
+        return koreanCityNames[mapped] ?? mapped
     }
+
+    // 도시명 한국어 표기. 매핑 없으면 영문 그대로.
+    private let koreanCityNames: [String: String] = [
+        "Tokyo": "도쿄", "Osaka": "오사카", "Kyoto": "교토", "Fukuoka": "후쿠오카",
+        "Sapporo": "삿포로", "Okinawa": "오키나와", "Nagoya": "나고야",
+        "Yufuin": "유후인", "Hiroshima": "히로시마", "Yonago": "요나고",
+        "Takamatsu": "타카마츠", "Kumamoto": "쿠마모토", "Nagasaki": "나가사키",
+        "Kagoshima": "가고시마", "Matsuyama": "마츠야마", "Miyazaki": "미야자키",
+        "Shizuoka": "시즈오카", "Aomori": "아오모리", "Akita": "아키타",
+        "Yamagata": "야마가타", "Hawaii": "하와이",
+        "Bangkok": "방콕", "Phuket": "푸켓", "Chiang Mai": "치앙마이",
+        "Singapore": "싱가포르", "Hanoi": "하노이", "Ho Chi Minh City": "호치민",
+        "Da Nang": "다낭", "Bali": "발리", "Manila": "마닐라", "Cebu": "세부",
+        "Taipei": "타이베이", "Kaohsiung": "가오슝",
+        "London": "런던", "Paris": "파리", "Rome": "로마",
+        "Barcelona": "바르셀로나", "Madrid": "마드리드", "Amsterdam": "암스테르담",
+        "Berlin": "베를린", "New York": "뉴욕", "Los Angeles": "로스앤젤레스",
+        "Las Vegas": "라스베이거스", "San Francisco": "샌프란시스코",
+        "Honolulu": "호놀룰루", "Guam": "괌", "Dubai": "두바이", "Istanbul": "이스탄불",
+        "Seoul": "서울", "Jeju": "제주", "Busan": "부산"
+    ]
 
     private func cityName(forAirportOrCity code: String) -> String {
         airportToCity[code] ?? code
