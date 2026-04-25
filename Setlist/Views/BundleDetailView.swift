@@ -15,15 +15,19 @@ struct BundleDetailView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                headerCard
-                flightsSection
-                hotelsSection
-                activitiesSection
+        ZStack {
+            AppColor.surface.ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: AppSpacing.lg) {
+                    headerCard
+                    flightsSection
+                    hotelsSection
+                    activitiesSection
+                }
+                .padding(.horizontal, AppSpacing.lg)
+                .padding(.top, AppSpacing.sm)
+                .padding(.bottom, 140)
             }
-            .padding()
-            .padding(.bottom, 140)
         }
         .safeAreaInset(edge: .bottom) {
             stickyBookingBar
@@ -48,42 +52,45 @@ struct BundleDetailView: View {
     }
 
     private var stickyBookingBar: some View {
-        VStack(spacing: 10) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("예상 총액").font(.caption).foregroundStyle(.secondary)
-                    Text("₩\(bundle.estimatedTotalKRW.formatted())")
-                        .font(.title3.bold())
-                }
-                Spacer()
-                Button {
-                    saveToWishlist()
-                } label: {
-                    Image(systemName: "heart")
-                        .font(.title3)
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-
-                Button {
-                    Task { await openBooking() }
-                } label: {
-                    HStack {
-                        if isOpeningBooking { ProgressView().tint(.white) }
-                        Text(isOpeningBooking ? "여는 중..." : "예약하기")
-                            .fontWeight(.semibold)
-                    }
-                    .padding(.horizontal, 8)
-                    .frame(height: 44)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .disabled(isOpeningBooking)
+        HStack(spacing: AppSpacing.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("예상 총액")
+                    .font(AppFont.caption2)
+                    .foregroundStyle(AppColor.inkSecondary)
+                    .tracking(0.5)
+                Text("₩\(bundle.estimatedTotalKRW.formatted())")
+                    .font(AppFont.title2)
+                    .foregroundStyle(AppColor.ink)
             }
+            Spacer(minLength: 0)
+            Button {
+                saveToWishlist()
+            } label: {
+                Image(systemName: savedConfirmation ? "heart.fill" : "heart")
+            }
+            .buttonStyle(IconCircleButton(tint: savedConfirmation ? AppColor.brandSecondary : AppColor.ink))
+
+            Button {
+                Task { await openBooking() }
+            } label: {
+                HStack(spacing: AppSpacing.sm) {
+                    if isOpeningBooking { ProgressView().tint(.white) }
+                    Text(isOpeningBooking ? "여는 중..." : "예약하기")
+                }
+            }
+            .buttonStyle(PrimaryGradientButton(fullWidth: false))
+            .disabled(isOpeningBooking)
         }
-        .padding()
-        .background(.ultraThinMaterial)
+        .padding(.horizontal, AppSpacing.lg)
+        .padding(.vertical, AppSpacing.md)
+        .background {
+            Rectangle()
+                .fill(AppColor.surfaceElevated)
+                .overlay(alignment: .top) {
+                    Rectangle().fill(.black.opacity(0.06)).frame(height: 0.5)
+                }
+                .ignoresSafeArea(edges: .bottom)
+        }
     }
 
     // MARK: - Subviews
@@ -93,44 +100,52 @@ struct BundleDetailView: View {
     private var headerCard: some View {
         ZStack(alignment: .bottomLeading) {
             RichImageView(topic: heroTopic, fallbackTint: heroTint) { headerImage = $0 }
-                .frame(height: 200)
+                .frame(height: 260)
                 .frame(maxWidth: .infinity)
 
             LinearGradient(
-                colors: [.clear, .black.opacity(0.55)],
+                colors: [.black.opacity(0.05), .black.opacity(0.65)],
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .frame(height: 200)
+            .frame(height: 260)
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 10) {
                 if case .concert(let c) = bundle.source {
-                    Label("공연 \(c.showDate.formatted(.dateTime.locale(Locale(identifier: "ko_KR")).month().day().hour().minute()))",
-                          systemImage: "music.mic")
-                        .font(.caption.bold())
-                        .foregroundStyle(.white.opacity(0.85))
-                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Image(systemName: "music.mic")
+                            .font(.system(size: 11, weight: .heavy))
+                        Text("공연 \(c.showDate.formatted(.dateTime.locale(Locale(identifier: "ko_KR")).month().day().hour().minute()))")
+                            .font(AppFont.kicker)
+                            .tracking(1.2)
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, AppSpacing.md)
+                    .padding(.vertical, 6)
+                    .background(.white.opacity(0.18), in: Capsule())
+                    .lineLimit(1)
                 }
                 Text(headline)
-                    .font(.title2.bold())
+                    .font(AppFont.display)
                     .foregroundStyle(.white)
                     .lineLimit(2)
-                    .minimumScaleFactor(0.9)
+                    .minimumScaleFactor(0.85)
                 Text(headerDateRange)
-                    .font(.subheadline)
+                    .font(AppFont.headline)
                     .foregroundStyle(.white.opacity(0.85))
                     .lineLimit(1)
             }
-            .padding(16)
+            .padding(AppSpacing.lg)
 
             if let headerImage {
                 ImageAttributionLabel(image: headerImage)
-                    .padding(8)
+                    .padding(AppSpacing.sm)
                     .frame(maxWidth: .infinity, alignment: .topTrailing)
-                    .frame(height: 200, alignment: .topTrailing)
+                    .frame(height: 260, alignment: .topTrailing)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .clipShape(RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous))
+        .appElevation(.medium)
     }
 
     private func flightTimeString(_ date: Date) -> String {
@@ -331,13 +346,21 @@ struct BundleDetailView: View {
         title: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.headline)
+        VStack(alignment: .leading, spacing: AppSpacing.md) {
+            Text(title)
+                .font(AppFont.headline)
+                .foregroundStyle(AppColor.ink)
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .padding(AppSpacing.lg)
+        .background(AppColor.surfaceElevated)
+        .clipShape(RoundedRectangle(cornerRadius: AppRadius.lg, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AppRadius.lg)
+                .stroke(.black.opacity(0.04), lineWidth: 1)
+        }
+        .appShadow(.soft)
     }
 
     // MARK: - Helpers

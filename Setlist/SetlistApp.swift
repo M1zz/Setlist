@@ -1,13 +1,28 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 @main
 struct SetlistApp: App {
+    init() {
+        configureNavigationBarAppearance()
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()
         }
         .modelContainer(for: [SavedTrip.self, BookedTrip.self, BookingIntent.self])
+    }
+
+    private func configureNavigationBarAppearance() {
+        let appearance = UINavigationBarAppearance()
+        appearance.configureWithTransparentBackground()
+        appearance.backgroundColor = UIColor(AppColor.surface).withAlphaComponent(0.96)
+        appearance.shadowColor = .clear
+        UINavigationBar.appearance().standardAppearance = appearance
+        UINavigationBar.appearance().scrollEdgeAppearance = appearance
+        UINavigationBar.appearance().compactAppearance = appearance
     }
 }
 
@@ -23,5 +38,6 @@ struct RootView: View {
             RevenueView()
                 .tabItem { Label("수익", systemImage: "chart.line.uptrend.xyaxis") }
         }
+        .tint(AppColor.brandPrimary)
     }
 }

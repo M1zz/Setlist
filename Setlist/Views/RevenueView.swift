@@ -23,26 +23,31 @@ struct RevenueView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    hero
-                    filterBar
-                    if AppEnvironment.useMockMRT {
-                        mockBanner
+            ZStack {
+                AppColor.surface.ignoresSafeArea()
+                ScrollView {
+                    VStack(spacing: AppSpacing.lg) {
+                        hero
+                        filterBar
+                        if AppEnvironment.useMockMRT {
+                            mockBanner
+                        }
+                        if let errorMessage {
+                            Label(errorMessage, systemImage: "exclamationmark.triangle")
+                                .foregroundStyle(AppColor.warning)
+                                .font(AppFont.caption)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        if allLines.isEmpty && !isLoading {
+                            emptyState
+                        } else {
+                            linesList
+                        }
                     }
-                    if let errorMessage {
-                        Label(errorMessage, systemImage: "exclamationmark.triangle")
-                            .foregroundStyle(.orange)
-                            .font(.caption)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    if allLines.isEmpty && !isLoading {
-                        emptyState
-                    } else {
-                        linesList
-                    }
+                    .padding(.horizontal, AppSpacing.lg)
+                    .padding(.top, AppSpacing.sm)
+                    .padding(.bottom, AppSpacing.xl)
                 }
-                .padding()
             }
             .navigationTitle("수익")
             .toolbar {
@@ -67,32 +72,61 @@ struct RevenueView: View {
     }
 
     private var hero: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("총 커미션")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Text("₩\(totalCommission.formatted())")
-                .font(.system(size: 40, weight: .heavy, design: .rounded))
-                .foregroundStyle(LinearGradient(
-                    colors: [.purple, .pink],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ))
-            HStack(spacing: 16) {
-                metric("매출", "₩\(totalSale.formatted())")
-                metric("평균 요율", totalSale > 0 ? String(format: "%.1f%%", avgRate * 100) : "—")
-                metric("건수", "\(allLines.count)")
+        ZStack(alignment: .topLeading) {
+            AppColor.brandGradient
+            // soft white glow top-right
+            Circle()
+                .fill(.white.opacity(0.18))
+                .frame(width: 220, height: 220)
+                .blur(radius: 50)
+                .offset(x: 130, y: -90)
+
+            VStack(alignment: .leading, spacing: AppSpacing.md) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("총 커미션")
+                        .font(AppFont.kicker)
+                        .tracking(1.6)
+                        .foregroundStyle(.white.opacity(0.78))
+                    Spacer()
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 16, weight: .heavy))
+                        .foregroundStyle(.white.opacity(0.78))
+                }
+                Text("₩\(totalCommission.formatted())")
+                    .font(.system(size: 44, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+
+                Divider()
+                    .overlay(.white.opacity(0.2))
+                    .padding(.vertical, 2)
+
+                HStack(spacing: AppSpacing.lg) {
+                    metric("매출", "₩\(totalSale.formatted())")
+                    Divider().overlay(.white.opacity(0.2)).frame(height: 32)
+                    metric("평균 요율", totalSale > 0 ? String(format: "%.1f%%", avgRate * 100) : "—")
+                    Divider().overlay(.white.opacity(0.2)).frame(height: 32)
+                    metric("건수", "\(allLines.count)")
+                }
             }
+            .padding(AppSpacing.lg)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+        .clipShape(RoundedRectangle(cornerRadius: AppRadius.xl, style: .continuous))
+        .appElevation(.medium)
     }
 
     private func metric(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.caption2).foregroundStyle(.secondary)
-            Text(value).font(.callout.bold())
+            Text(label)
+                .font(AppFont.caption2)
+                .foregroundStyle(.white.opacity(0.7))
+            Text(value)
+                .font(AppFont.bodyBold)
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
     }
 
@@ -132,11 +166,12 @@ struct RevenueView: View {
     }
 
     private var linesList: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("건별 내역")
-                .font(.headline)
-            ForEach(allLines) { line in
-                lineRow(line)
+        VStack(alignment: .leading, spacing: AppSpacing.md) {
+            SectionHeader(title: "건별 내역")
+            VStack(spacing: AppSpacing.sm) {
+                ForEach(allLines) { line in
+                    lineRow(line)
+                }
             }
         }
     }
@@ -190,17 +225,23 @@ struct RevenueView: View {
                 .foregroundStyle(.tertiary)
             }
         }
-        .padding(12)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .padding(AppSpacing.md)
+        .background(AppColor.surfaceElevated)
+        .clipShape(RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: AppRadius.md)
+                .stroke(.black.opacity(0.04), lineWidth: 1)
+        }
+        .appShadow(.subtle)
     }
 
     private func pill(_ text: String, color: Color) -> some View {
         Text(text)
-            .font(.caption2.bold())
+            .font(AppFont.badge)
             .foregroundStyle(color)
-            .padding(.horizontal, 8)
+            .padding(.horizontal, AppSpacing.sm)
             .padding(.vertical, 3)
-            .background(color.opacity(0.15), in: Capsule())
+            .background(color.opacity(0.14), in: Capsule())
     }
 
     // MARK: - Data
