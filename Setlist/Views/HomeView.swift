@@ -210,24 +210,22 @@ struct HomeView: View {
             Task { await buildFare(fare) }
         } label: {
             HStack(spacing: AppSpacing.md) {
+                // Thumbnail — fixed 76pt
                 RichImageView(topic: "\(city) cityscape", fallbackTint: AppColor.brandPrimary)
-                    .frame(width: 84, height: 84)
+                    .frame(width: 76, height: 76)
                     .clipShape(RoundedRectangle(cornerRadius: AppRadius.md, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: AppRadius.md)
                             .stroke(.black.opacity(0.06), lineWidth: 1)
                     }
 
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: AppSpacing.sm) {
-                        Text(city)
-                            .font(AppFont.title3)
-                            .foregroundStyle(AppColor.ink)
-                            .lineLimit(1)
-                        if let pct = discountPct {
-                            StatusBadge(text: "-\(pct)%", variant: .success)
-                        }
-                    }
+                // Middle column — flexible
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(city)
+                        .font(AppFont.title3)
+                        .foregroundStyle(AppColor.ink)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                     Text(fareDateLine(fare))
                         .font(AppFont.caption)
                         .foregroundStyle(AppColor.inkSecondary)
@@ -236,22 +234,25 @@ struct HomeView: View {
                         .font(AppFont.kicker)
                         .tracking(1.2)
                         .foregroundStyle(AppColor.inkTertiary)
+                        .lineLimit(1)
                 }
-                Spacer(minLength: 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
+                // Price column — fixed width to its content
                 VStack(alignment: .trailing, spacing: 4) {
-                    if buildingFareID == fare.id {
-                        ProgressView().controlSize(.small).tint(AppColor.brandPrimary)
+                    if let pct = discountPct {
+                        StatusBadge(text: "-\(pct)%", variant: .success)
+                            .fixedSize()
                     }
                     Text("₩\(fare.totalPriceKRW.formatted())")
                         .font(AppFont.title3)
                         .foregroundStyle(AppColor.ink)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                    Text("최저가")
-                        .font(AppFont.caption2)
-                        .foregroundStyle(AppColor.inkTertiary)
+                        .fixedSize()
+                    if buildingFareID == fare.id {
+                        ProgressView().controlSize(.small).tint(AppColor.brandPrimary)
+                    }
                 }
+                .fixedSize(horizontal: true, vertical: false)
             }
             .padding(AppSpacing.md)
             .background(AppColor.surfaceElevated)

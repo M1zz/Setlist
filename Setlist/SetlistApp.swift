@@ -35,8 +35,8 @@ struct RootView: View {
                 .tabItem { Label("찜", systemImage: "heart") }
             BookingsView()
                 .tabItem { Label("내 여행", systemImage: "airplane") }
-            RevenueView()
-                .tabItem { Label("수익", systemImage: "chart.line.uptrend.xyaxis") }
+            MoreView()
+                .tabItem { Label("더보기", systemImage: "person.crop.circle") }
         }
         .tint(AppColor.brandPrimary)
     }
